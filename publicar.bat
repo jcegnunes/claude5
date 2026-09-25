@@ -22,6 +22,18 @@ if errorlevel 1 (
 )
 
 REM ---------------------------------------------------------------
+REM 1b. Confere se esta pasta e mesmo o projeto
+REM ---------------------------------------------------------------
+if not exist "package.json" (
+  echo [ATENCAO] Esta pasta nao parece ser o projeto ^(package.json nao encontrado^).
+  echo           Execute o publicar.bat DENTRO da pasta extraida do projeto,
+  echo           e nao na pasta Downloads ou em outra pasta com arquivos pessoais.
+  set "CONF="
+  set /p "CONF=Continuar mesmo assim? (S/N): "
+  if /i not "!CONF!"=="S" goto :fim_ok
+)
+
+REM ---------------------------------------------------------------
 REM 2. Protecao: nunca enviar node_modules, dist ou arquivos .env
 REM ---------------------------------------------------------------
 if not exist ".gitignore" (
@@ -40,12 +52,7 @@ REM ---------------------------------------------------------------
 if not exist ".git" (
   echo Esta pasta ainda nao esta ligada ao GitHub.
   echo.
-  set "REPO_URL="
-  set /p "REPO_URL=Cole a URL do repositorio (ex: https://github.com/usuario/repositorio.git): "
-  if "!REPO_URL!"=="" (
-    echo [ERRO] Nenhuma URL informada.
-    goto :fim_erro
-  )
+  call :pedir_url
   set "BRANCH="
   set /p "BRANCH=Branch ligado ao AI Studio [Enter = main]: "
   if "!BRANCH!"=="" set "BRANCH=main"
@@ -55,6 +62,45 @@ if not exist ".git" (
 ) else (
   for /f "delims=" %%b in ('git symbolic-ref --short HEAD 2^>nul') do set "BRANCH=%%b"
   if "!BRANCH!"=="" set "BRANCH=main"
+  REM Confere se o endereco salvo e uma URL valida do GitHub, nao um token
+  set "REPO_URL="
+  for /f "delims=" %%u in ('git remote get-url origin 2^>nul') do set "REPO_URL=%%u"
+  call :validar_url
+  if "!URL_OK!"=="0" (
+    echo [ATENCAO] O endereco do repositorio salvo nesta pasta e invalido.
+    echo           Informe novamente a URL correta.
+    call :pedir_url
+    git remote get-url origin >nul 2>nul
+    if errorlevel 1 (
+      git remote add origin "!REPO_URL!"
+    ) else (
+      git remote set-url origin "!REPO_URL!"
+    )
+    echo URL corrigida.
+    echo.
+  )
+)
+
+REM ---------------------------------------------------------------
+REM 3b. Ignora instaladores e compactados, ex: GitHubDesktopSetup.exe e
+REM     o proprio .zip do projeto. Lista local, nao vai para o GitHub.
+REM ---------------------------------------------------------------
+if not exist ".git\info" mkdir ".git\info"
+findstr /c:"# publicar.bat" ".git\info\exclude" >nul 2>nul
+if errorlevel 1 (
+  >> ".git\info\exclude" (
+    echo # publicar.bat - arquivos que nunca devem ir para o GitHub
+    echo *.exe
+    echo *.msi
+    echo *.zip
+    echo *.rar
+    echo *.7z
+    echo *.iso
+    echo node_modules/
+    echo dist/
+    echo .env
+    echo .env.local
+  )
 )
 
 REM ---------------------------------------------------------------
@@ -74,9 +120,23 @@ REM 5. Busca a versao atual do GitHub
 REM ---------------------------------------------------------------
 echo.
 echo Consultando o GitHub (branch !BRANCH!)...
-set "REMOTE_OK=0"
-git fetch -q origin "!BRANCH!" 2>nul
-if not errorlevel 1 set "REMOTE_OK=1"
+git ls-remote --exit-code --heads origin "!BRANCH!" >nul 2>nul
+set "LSR=!errorlevel!"
+if "!LSR!"=="0" (
+  set "REMOTE_OK=1"
+  git fetch -q origin "!BRANCH!"
+  if errorlevel 1 (
+    echo [ERRO] Nao foi possivel baixar a versao atual do GitHub.
+    goto :fim_erro
+  )
+) else if "!LSR!"=="2" (
+  set "REMOTE_OK=0"
+) else (
+  echo [ERRO] Nao foi possivel acessar o repositorio no GitHub.
+  echo        Confira a internet, o login no navegador e se esta URL existe:
+  git remote get-url origin
+  goto :fim_erro
+)
 
 if "!REMOTE_OK!"=="1" (
   set "BEHIND=0"
@@ -98,17 +158,42 @@ if "!REMOTE_OK!"=="1" (
     )
   )
   REM Coloca esta pasta como nova versao sobre o historico do GitHub
-  REM (sem push forcado: nada do historico e apagado)
+  REM - sem push forcado: nada do historico e apagado
   git update-ref refs/heads/!BRANCH! FETCH_HEAD
   git reset -q
 ) else (
   echo Branch !BRANCH! ainda nao existe no GitHub. Sera criado agora.
+  REM Descarta commits locais que nunca chegaram ao GitHub, ex: envio
+  REM recusado por arquivo grande. Os arquivos da pasta nao sao tocados.
+  git update-ref -d refs/heads/!BRANCH! >nul 2>nul
+  git read-tree --empty
 )
 
 REM ---------------------------------------------------------------
 REM 6. Prepara as alteracoes (inclui arquivos apagados)
 REM ---------------------------------------------------------------
 git add -A
+
+REM Arquivos acima do limite do GitHub (100 MB) sao retirados do envio
+set "N_BIG=0"
+for /f "usebackq delims=" %%f in (`git -c core.quotepath=off diff --cached --name-only --diff-filter=AM`) do (
+  set "FP=%%f"
+  set "FP=!FP:/=\!"
+  for %%z in ("!FP!") do (
+    if %%~zz GTR 95000000 (
+      set /a N_BIG+=1
+      echo [IGNORADO] %%f ^(%%~zz bytes - acima do limite de 100 MB do GitHub^)
+      git rm -q --cached "%%f"
+      >> ".git\info\exclude" echo /%%f
+    )
+  )
+)
+if not "!N_BIG!"=="0" (
+  echo.
+  echo !N_BIG! arquivo^(s^) grande^(s^) ficou^(aram^) fora do envio e sera^(ao^) ignorado^(s^) nas proximas vezes.
+  echo.
+)
+
 git diff --cached --quiet
 if not errorlevel 1 (
   echo.
@@ -150,7 +235,8 @@ echo Enviando ao GitHub...
 git push -u origin "!BRANCH!"
 if errorlevel 1 (
   echo.
-  echo [ERRO] O envio falhou. Verifique:
+  echo [ERRO] O envio falhou. Verifique a mensagem acima e:
+  echo   - se algum arquivo passa de 100 MB ^(o GitHub recusa^);
   echo   - se voce esta conectado a internet;
   echo   - se fez login na janela do GitHub que abriu no navegador;
   echo   - se sua conta tem permissao de escrita neste repositorio.
@@ -175,4 +261,37 @@ exit /b 1
 :fim_ok
 echo.
 pause
+exit /b 0
+
+REM ---------------------------------------------------------------
+REM Sub-rotinas
+REM ---------------------------------------------------------------
+:pedir_url
+set "REPO_URL="
+set /p "REPO_URL=Cole a URL do repositorio - ex: https://github.com/usuario/repositorio : "
+call :validar_url
+if "!URL_OK!"=="1" exit /b 0
+if "!URL_TOKEN!"=="1" (
+  echo.
+  echo [ATENCAO] Isso e um TOKEN de acesso, nao a URL do repositorio.
+  echo           Este script nao precisa de token: o login e feito no navegador.
+  echo           Por seguranca, revogue esse token no GitHub:
+  echo           Settings ^> Developer settings ^> Personal access tokens ^> Delete
+  echo.
+) else (
+  echo [ATENCAO] A URL deve comecar com https://github.com/  - tente novamente.
+)
+goto :pedir_url
+
+:validar_url
+set "URL_OK=0"
+set "URL_TOKEN=0"
+if "!REPO_URL!"=="" exit /b 0
+echo(%REPO_URL%| findstr /i /c:"github_pat_" /c:"ghp_" /c:"gho_" /c:"ghu_" /c:"ghs_" >nul
+if not errorlevel 1 (
+  set "URL_TOKEN=1"
+  exit /b 0
+)
+echo(%REPO_URL%| findstr /i /b /c:"https://github.com/" >nul
+if not errorlevel 1 set "URL_OK=1"
 exit /b 0

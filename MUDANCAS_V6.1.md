@@ -52,3 +52,19 @@ Layout mantido. Mudanças apenas de texto/ação:
 ## Recomendações pendentes (não alteradas para não mudar o funcionamento)
 - As políticas RLS permitem leitura/escrita total com a chave pública. Para produção, migrar o login para **Supabase Auth** e restringir por `company_id`.
 - Senhas ficam em texto puro na tabela `users` e a tela de login preenche a senha ao escolher um usuário rápido.
+
+## Login pelo banco de dados (usuário + senha)
+- Removido o login automático (o app abria logado com um usuário de demonstração).
+- Removido o "Acesso Rápido" sem senha e a senha do administrador que estava no código do app.
+- Login por e-mail **ou** nome de usuário, conferido no servidor (`jvm_login`), com senhas bcrypt.
+- A coluna `password_hash` não pode mais ser lida nem gravada pela chave pública do app.
+- Senhas antigas em texto puro são criptografadas automaticamente pelo script SQL.
+- Acesso offline: somente para quem já entrou com internet no aparelho (validade 30 dias).
+- Senhas nunca ficam gravadas no aparelho nem em backups.
+
+## Tela de login simplificada
+- Exibe apenas: JVM Engenharia (CNPJ 29.894.500/0001-04), Usuário, Senha, Entrar e "Esqueci minha senha".
+- Removidos: seletor de empresas, cadastro de empresa/usuário, lista de usuários e card do Supabase.
+- "Esqueci minha senha" abre um pedido de redefinição por e-mail ao administrador
+  (as senhas são cadastradas no banco de dados).
+- CNPJ oficial da JVM aplicado nos dados padrão, no script SQL e nos aparelhos já instalados.

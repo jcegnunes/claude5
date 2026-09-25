@@ -57,3 +57,41 @@ Veja `MUDANCAS_V6.1.md` para a lista completa de correções.
 O script nunca usa push forçado: o histórico do GitHub é preservado, arquivos
 removidos na nova versão são apagados do repositório e, se o GitHub tiver
 alterações mais novas (ex.: feitas no AI Studio), ele avisa e pede confirmação.
+
+## Visualizar no computador (Windows) — `executar.bat`
+
+1. Instale o Node.js LTS (https://nodejs.org) com as opções padrão.
+2. Dê duplo clique em `executar.bat` dentro da pasta do projeto.
+3. Na primeira vez ele instala as dependências (alguns minutos) e depois abre
+   `http://localhost:3000` no navegador. Para encerrar, feche a janela preta.
+
+## Login com usuário e senha do banco de dados
+
+O acesso ao app exige **e-mail ou nome de usuário + senha cadastrados na tabela
+`public.users` do Supabase**. As senhas ficam criptografadas (bcrypt), o app não
+consegue lê-las e a conferência é feita no servidor pela função `jvm_login`.
+
+No **SQL Editor** do Supabase:
+
+```sql
+-- Criar um usuário
+INSERT INTO public.users (id, company_id, name, email, username, role, password_hash)
+VALUES ('usr-maria', 'comp-jvm', 'Maria Souza', 'maria@empresa.com.br', 'maria', 'tecnico', 'Senha@2026');
+
+-- Trocar a senha (é criptografada automaticamente ao salvar)
+UPDATE public.users SET password_hash = 'NovaSenha@2026' WHERE email = 'maria@empresa.com.br';
+
+-- Definir/alterar o nome de usuário
+UPDATE public.users SET username = 'maria' WHERE email = 'maria@empresa.com.br';
+
+-- Bloquear / desbloquear o acesso
+UPDATE public.users SET active = false WHERE email = 'maria@empresa.com.br';
+```
+
+Papéis (`role`): `admin`, `responsavel_tecnico`, `tecnico`, `administrativo`.
+
+- Usuários criados pela tela "Novo Usuário" do app recebem a senha inicial digitada
+  (aceita só uma vez, nos primeiros 15 minutos). Depois, a senha só muda pelo banco.
+- Sem internet, entra apenas quem já fez login com internet naquele aparelho nos
+  últimos 30 dias.
+- Após a atualização, todos precisam entrar de novo uma vez (não há mais login automático).

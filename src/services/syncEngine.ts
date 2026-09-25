@@ -310,9 +310,38 @@ export class DielectricStorageService {
     if (!localStorage.getItem(STORAGE_KEYS.COMPANY)) {
       setLocal(STORAGE_KEYS.COMPANY, JVM_COMPANY_INFO);
     }
-    if (!localStorage.getItem(STORAGE_KEYS.CURRENT_USER)) {
-      setLocal(STORAGE_KEYS.CURRENT_USER, INITIAL_USERS[1]); // Default to Carlos Silveira
-    }
+    // CNPJ oficial da JVM Engenharia (substitui os CNPJs de demonstração)
+    try {
+      const DEMO_CNPJS = ['34.892.115/0001-80', '38.456.789/0001-12'];
+      const JVM_CNPJ = '29.894.500/0001-04';
+      const comps = getLocal<Company[]>(STORAGE_KEYS.COMPANIES, []);
+      const jvm = comps.find(c => c.id === 'comp-jvm');
+      if (jvm && (!jvm.cnpj || DEMO_CNPJS.includes(jvm.cnpj))) {
+        jvm.cnpj = JVM_CNPJ;
+        jvm.updatedAt = new Date().toISOString();
+        setLocal(STORAGE_KEYS.COMPANIES, comps);
+      }
+      const info = getLocal<CompanyLabInfo | null>(STORAGE_KEYS.COMPANY, null);
+      if (info && (!info.cnpj || DEMO_CNPJS.includes(info.cnpj))) {
+        setLocal(STORAGE_KEYS.COMPANY, { ...info, cnpj: JVM_CNPJ });
+      }
+      const active = getLocal<Company | null>(STORAGE_KEYS.ACTIVE_COMPANY, null);
+      if (active && active.id === 'comp-jvm' && (!active.cnpj || DEMO_CNPJS.includes(active.cnpj))) {
+        setLocal(STORAGE_KEYS.ACTIVE_COMPANY, { ...active, cnpj: JVM_CNPJ });
+      }
+    } catch {}
+
+    // Sem login automático: a sessão só existe após autenticação no banco.
+    // Senhas nunca ficam guardadas no aparelho (remove as de versões antigas).
+    try {
+      const storedUsers = getLocal<User[]>(STORAGE_KEYS.USERS, []);
+      if (storedUsers.some(u => u && u.password)) {
+        setLocal(STORAGE_KEYS.USERS, storedUsers.map(u => {
+          const { password: _pw, ...rest } = u as User;
+          return rest as User;
+        }));
+      }
+    } catch {}
 
     // Auto-migrate all entities to ensure companyId is populated
     try {
@@ -593,8 +622,15 @@ export class DielectricStorageService {
     const activeComp = this.getActiveCompany();
     const targetCompId = user.companyId || activeComp.id;
 
+    // A senha informada vira "senha inicial" enviada ao banco (criptografada lá)
+    // e nunca é guardada na lista local de usuários.
+    const { password: typedPassword, ...userWithoutPassword } = user;
+    if (typedPassword && typedPassword.trim()) {
+      this.setPendingInitialPassword(user.id, typedPassword.trim());
+    }
+
     const updatedUser: User = {
-      ...user,
+      ...(userWithoutPassword as User),
       companyId: targetCompId,
       companyName: user.companyName || activeComp.name,
       active: user.active ?? true
@@ -612,6 +648,27 @@ export class DielectricStorageService {
     this.enqueueSync('user', isNew ? 'create' : 'update', user.id, updatedUser);
     window.dispatchEvent(new Event('jvm-data-changed'));
     return updatedUser;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Senha inicial de usuários recém-criados (mantida só até ser enviada ao banco)
+  // ---------------------------------------------------------------------------
+  private static PENDING_PASSWORDS_KEY = 'jvm_pending_initial_passwords';
+
+  static setPendingInitialPassword(userId: string, password: string): void {
+    const all = getLocal<Record<string, string>>(this.PENDING_PASSWORDS_KEY, {});
+    all[userId] = password;
+    setLocal(this.PENDING_PASSWORDS_KEY, all);
+  }
+
+  static getPendingInitialPasswords(): Record<string, string> {
+    return getLocal<Record<string, string>>(this.PENDING_PASSWORDS_KEY, {});
+  }
+
+  static clearPendingInitialPassword(userId: string): void {
+    const all = getLocal<Record<string, string>>(this.PENDING_PASSWORDS_KEY, {});
+    delete all[userId];
+    setLocal(this.PENDING_PASSWORDS_KEY, all);
   }
 
   // Company Info
@@ -1088,8 +1145,36 @@ export class DielectricStorageService {
   }
 
   // Norms and Criteria
+  /** Corrige registros de norma incompletos (vindos de versões antigas ou da nuvem). */
+  private static sanitizeNorm(raw: any): NormCriterion | null {
+    if (!raw || typeof raw !== 'object' || !raw.id) return null;
+    const seed = INITIAL_NORMS.find(s => s.id === raw.id);
+    const n: any = { ...(seed || {}), ...raw };
+    const str = (v: any, fb: string) => (typeof v === 'string' ? v : (v === null || v === undefined ? fb : String(v)));
+    const num = (v: any, fb: number) => {
+      const x = typeof v === 'number' ? v : parseFloat(String(v ?? '').replace(',', '.'));
+      return isNaN(x) ? fb : x;
+    };
+    n.normCode = str(n.normCode, 'Norma');
+    n.normName = str(n.normName, n.normCode);
+    n.dielectricClass = str(n.dielectricClass, '0');
+    n.voltageType = str(n.voltageType, 'AC');
+    n.currentUnit = str(n.currentUnit, 'mA');
+    n.testVoltage_kV = num(n.testVoltage_kV, 0);
+    n.testDurationSeconds = num(n.testDurationSeconds, 60);
+    n.maxLeakageCurrent = num(n.maxLeakageCurrent, 0);
+    n.applicableEquipmentTypes = Array.isArray(n.applicableEquipmentTypes)
+      ? n.applicableEquipmentTypes.filter((t: any) => typeof t === 'string')
+      : [];
+    if (n.gloveLengthLimits && typeof n.gloveLengthLimits !== 'object') delete n.gloveLengthLimits;
+    return n as NormCriterion;
+  }
+
   static getNorms(): NormCriterion[] {
-    const norms = getLocal<NormCriterion[]>(STORAGE_KEYS.NORMS, INITIAL_NORMS);
+    const stored = getLocal<any[]>(STORAGE_KEYS.NORMS, INITIAL_NORMS);
+    const norms: NormCriterion[] = (Array.isArray(stored) ? stored : INITIAL_NORMS)
+      .map(n => this.sanitizeNorm(n))
+      .filter((n): n is NormCriterion => !!n);
     // Ensure all standard seed criteria (such as ASTM D178-22 and ASTM D1048) are always included
     const existingIds = new Set(norms.map(n => n.id));
     let missingAdded = false;
@@ -1792,17 +1877,34 @@ export class DielectricStorageService {
    */
   static enqueueAllForBootstrap(): number {
     const items: Array<{ entityType: SyncEntityType; action: SyncQueueItem['action']; entityId: string }> = [];
-    const add = (entityType: SyncEntityType, list: any[]) => {
-      list.forEach(r => r && r.id && items.push({ entityType, action: r.deletedAt ? 'delete' : 'update', entityId: r.id }));
+    /**
+     * Registros de DEMONSTRAÇÃO nunca editados não são enviados: um navegador
+     * novo (ex.: versão local em localhost) começa com dados fictícios, que
+     * não devem ir para o banco real. Seeds editados pelo usuário são enviados.
+     */
+    const isUntouchedSeed = (r: any, seeds: any[]): boolean => {
+      const seed = seeds.find(x => x && x.id === r.id);
+      if (!seed) return false;
+      if (r.deletedAt) return false;
+      if (seed.updatedAt || r.updatedAt) return seed.updatedAt === r.updatedAt;
+      const strip = (o: any) => { const { syncStatus, ...rest } = o || {}; return JSON.stringify(rest); };
+      return strip(seed) === strip(r);
     };
-    add('company', getLocal<any[]>(STORAGE_KEYS.COMPANIES, []));
-    add('user', getLocal<any[]>(STORAGE_KEYS.USERS, []));
-    add('client', getLocal<any[]>(STORAGE_KEYS.CLIENTS, []));
-    add('equipment', getLocal<any[]>(STORAGE_KEYS.EQUIPMENT, []));
-    add('service_order', getLocal<any[]>(STORAGE_KEYS.SERVICE_ORDERS, []));
-    add('instrument', getLocal<any[]>(STORAGE_KEYS.INSTRUMENTS, []));
-    add('norm', getLocal<any[]>(STORAGE_KEYS.NORMS, []));
-    add('test', getLocal<any[]>(STORAGE_KEYS.TESTS, []));
+    const add = (entityType: SyncEntityType, list: any[], seeds: any[] = []) => {
+      list.forEach(r => {
+        if (!r || !r.id) return;
+        if (seeds.length && isUntouchedSeed(r, seeds)) return;
+        items.push({ entityType, action: r.deletedAt ? 'delete' : 'update', entityId: r.id });
+      });
+    };
+    add('company', getLocal<any[]>(STORAGE_KEYS.COMPANIES, []), INITIAL_COMPANIES);
+    add('user', getLocal<any[]>(STORAGE_KEYS.USERS, []), INITIAL_USERS);
+    add('client', getLocal<any[]>(STORAGE_KEYS.CLIENTS, []), INITIAL_CLIENTS);
+    add('equipment', getLocal<any[]>(STORAGE_KEYS.EQUIPMENT, []), INITIAL_EQUIPMENT);
+    add('service_order', getLocal<any[]>(STORAGE_KEYS.SERVICE_ORDERS, []), INITIAL_SERVICE_ORDERS);
+    add('instrument', getLocal<any[]>(STORAGE_KEYS.INSTRUMENTS, []), INITIAL_INSTRUMENTS);
+    add('norm', getLocal<any[]>(STORAGE_KEYS.NORMS, [])); // normas técnicas oficiais: sempre enviadas
+    add('test', getLocal<any[]>(STORAGE_KEYS.TESTS, []), INITIAL_TEST_RECORDS);
     add('report', getLocal<any[]>(STORAGE_KEYS.REPORTS, []));
     items.push({ entityType: 'company_info', action: 'update', entityId: this.getActiveCompany().id });
     this.enqueueMany(items);
@@ -2003,7 +2105,11 @@ export class DielectricStorageService {
   }
 
   static saveUsers(users: User[]): void {
-    this.mergeBulk(STORAGE_KEYS.USERS, 'user', users);
+    // Backups antigos podem conter senhas: nunca são restauradas no aparelho
+    this.mergeBulk(STORAGE_KEYS.USERS, 'user', (users || []).map(u => {
+      const { password: _pw, ...rest } = u || ({} as User);
+      return rest as User;
+    }));
   }
 
   static saveAuditLogs(logs: AuditLog[]): void {

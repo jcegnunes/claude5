@@ -2,10 +2,13 @@ import { User, UserRole, Company } from '../types';
 import { DielectricStorageService } from './syncEngine';
 import { SupabaseService } from './supabaseService';
 
+/**
+ * Perfil do Administrador Master (apenas dados de exibição).
+ * A SENHA NÃO FICA NO APP: é cadastrada e conferida no banco de dados.
+ */
 export const MASTER_ADMIN_CONFIG = {
   name: 'Eng. João Nunes da Silva',
   email: 'joao.nunues@jvmengenharia.com.br',
-  password: 'Jvm@141519',
   role: 'responsavel_tecnico' as UserRole,
   registrationNumber: 'CREA/SP 506894123-0',
   phone: '(11) 98765-4321',
@@ -13,6 +16,46 @@ export const MASTER_ADMIN_CONFIG = {
   companyId: 'comp-jvm',
   companyName: 'JVM Engenharia & Treinamentos'
 };
+
+/** Credencial offline: prova de senha (PBKDF2) de quem já entrou neste aparelho. */
+interface OfflineCredential {
+  userId: string;
+  logins: string[];
+  salt: string;
+  hash: string;
+  iterations: number;
+  savedAt: string;
+  profile: User;
+}
+
+const OFFLINE_CREDENTIALS_KEY = 'jvm_offline_credentials';
+const OFFLINE_VALIDITY_DAYS = 30;
+const PBKDF2_ITERATIONS = 150000;
+const DB_SESSION_PREFIX = 'jvm_db_session_';
+
+function toBase64(bytes: ArrayBuffer | Uint8Array): string {
+  const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  let bin = '';
+  arr.forEach(b => (bin += String.fromCharCode(b)));
+  return btoa(bin);
+}
+
+function fromBase64(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+function cryptoAvailable(): boolean {
+  return typeof window !== 'undefined' && !!window.crypto && !!window.crypto.subtle;
+}
+
+async function derivePasswordHash(password: string, salt: Uint8Array, iterations: number): Promise<string> {
+  const keyMaterial = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations }, keyMaterial, 256);
+  return toBase64(bits);
+}
 
 export class AuthService {
   private static AUTH_TOKEN_KEY = 'jvm_auth_token';
@@ -45,108 +88,126 @@ export class AuthService {
   }
 
   static getAvailableUsers(companyId?: string): User[] {
-    const allUsers = DielectricStorageService.getUsers(companyId || 'ALL');
-    return allUsers;
+    return DielectricStorageService.getUsers(companyId || 'ALL');
   }
 
-  static login(
-    email: string, 
-    password: string, 
-    companyId?: string, 
+  /**
+   * Login com e-mail OU nome de usuário + senha cadastrados no banco de dados.
+   * - Online: a senha é conferida no servidor (função jvm_login).
+   * - Sem internet: aceita apenas quem já entrou online neste aparelho nos
+   *   últimos 30 dias (prova de senha PBKDF2 guardada localmente).
+   */
+  static async loginAsync(
+    login: string,
+    password: string,
+    companyId?: string,
     rememberMe: boolean = true
-  ): { success: boolean; user?: User; error?: string } {
-    const cleanEmail = email.trim().toLowerCase();
-    const cleanPass = password.trim();
-
-    // Check Master Admin (Support both nunues and nunes)
-    if (
-      (cleanEmail === 'joao.nunues@jvmengenharia.com.br' || cleanEmail === 'joao.nunes@jvmengenharia.com.br' || cleanEmail === 'admin@jvm.com') &&
-      cleanPass === MASTER_ADMIN_CONFIG.password
-    ) {
-      const masterUser = this.getMasterAdminUser();
-      if (companyId) {
-        masterUser.companyId = companyId;
-        const comp = DielectricStorageService.getCompanyById(companyId);
-        if (comp) masterUser.companyName = comp.name;
-      }
-      this.setCurrentUser(masterUser, rememberMe);
-      return { success: true, user: masterUser };
+  ): Promise<{ success: boolean; user?: User; error?: string; source?: 'offline' | 'supabase' }> {
+    const cleanLogin = (login || '').trim().toLowerCase();
+    if (!cleanLogin || !password) {
+      return { success: false, error: 'Informe o usuário (ou e-mail) e a senha.' };
     }
 
-    // Check against local database users
-    const allUsers = DielectricStorageService.getUsers('ALL');
-    const foundUser = allUsers.find(u => u.email.toLowerCase() === cleanEmail);
-
-    if (foundUser) {
-      // Check if user is active
-      if (foundUser.active === false) {
-        return {
-          success: false,
-          error: 'Este usuário está inativado no sistema. Contate o Administrador.'
-        };
+    const online = typeof navigator === 'undefined' || navigator.onLine !== false;
+    if (online) {
+      const res = await SupabaseService.authenticateWithSupabase(cleanLogin, password, companyId);
+      if (res.success && res.user) {
+        const user = this.applyCompany(res.user, companyId);
+        await this.saveOfflineCredential(user, cleanLogin, password);
+        this.setCurrentUser(user, rememberMe, true);
+        return { success: true, user, source: 'supabase' };
       }
-
-      // Senha do próprio usuário (removidas as senhas universais que abriam
-      // QUALQUER conta). Usuários antigos sem senha cadastrada continuam
-      // entrando até que o administrador defina uma senha.
-      const validPass = !foundUser.password || foundUser.password === cleanPass;
-
-      if (validPass) {
-        // If companyId was selected in UI, and user is allowed (e.g. MasterAdmin or company matches)
-        const targetCompanyId = companyId || foundUser.companyId || 'comp-jvm';
-        const targetCompany = DielectricStorageService.getCompanyById(targetCompanyId);
-
-        const authenticatedUser: User = {
-          ...foundUser,
-          companyId: targetCompanyId,
-          companyName: targetCompany?.name || foundUser.companyName || 'JVM Engenharia & Treinamentos'
-        };
-
-        this.setCurrentUser(authenticatedUser, rememberMe);
-        return { success: true, user: authenticatedUser };
+      if (!res.networkError) {
+        return { success: false, error: res.error || 'Usuário ou senha inválidos.' };
       }
+    }
+
+    // Sem conexão com o banco: tenta a credencial offline deste aparelho
+    const offlineUser = await this.verifyOfflineCredential(cleanLogin, password);
+    if (offlineUser) {
+      const user = this.applyCompany(offlineUser, companyId);
+      this.setCurrentUser(user, rememberMe, true);
+      return { success: true, user, source: 'offline' };
     }
 
     return {
       success: false,
-      error: 'E-mail ou senha incorretos. Verifique suas credenciais de acesso.'
+      error: 'Sem conexão com o banco de dados. O acesso offline só é permitido para quem já entrou neste aparelho com internet nos últimos 30 dias.'
     };
   }
 
-  /**
-   * Login assíncrono com suporte híbrido: local primeiro + Supabase Cloud se necessário
-   */
-  static async loginAsync(
-    email: string, 
-    password: string, 
-    companyId?: string, 
-    rememberMe: boolean = true
-  ): Promise<{ success: boolean; user?: User; error?: string; source?: 'local' | 'supabase' }> {
-    // 1. Tentar autenticação local offline-first imediata
-    const localResult = this.login(email, password, companyId, rememberMe);
-    if (localResult.success) {
-      return { ...localResult, source: 'local' };
-    }
+  private static applyCompany(user: User, companyId?: string): User {
+    const targetCompId = companyId || user.companyId || 'comp-jvm';
+    const comp = DielectricStorageService.getCompanyById(targetCompId);
+    const { password: _pw, ...clean } = user;
+    return {
+      ...(clean as User),
+      companyId: targetCompId,
+      companyName: comp ? comp.name : user.companyName
+    };
+  }
 
-    // 2. Se falhar ou o usuário não estiver em cache local, consultar Supabase Cloud
+  // ---------------------------------------------------------------------------
+  // Credenciais offline
+  // ---------------------------------------------------------------------------
+  private static readOfflineCredentials(): OfflineCredential[] {
     try {
-      const supabaseResult = await SupabaseService.authenticateWithSupabase(email, password, companyId);
-      if (supabaseResult.success && supabaseResult.user) {
-        this.setCurrentUser(supabaseResult.user, rememberMe);
-        return { success: true, user: supabaseResult.user, source: 'supabase' };
-      } else if (supabaseResult.error && !supabaseResult.error.includes('não localizado')) {
-        return { success: false, error: supabaseResult.error };
-      }
-    } catch (err: any) {
-      console.warn('Tentativa de autenticação Supabase falhou:', err);
+      return JSON.parse(localStorage.getItem(OFFLINE_CREDENTIALS_KEY) || '[]');
+    } catch {
+      return [];
     }
+  }
 
-    // Retorna erro padrão se nenhuma tentativa obteve sucesso
-    return localResult;
+  private static async saveOfflineCredential(user: User, typedLogin: string, password: string): Promise<void> {
+    if (!cryptoAvailable()) return;
+    try {
+      const salt = crypto.getRandomValues(new Uint8Array(16));
+      const hash = await derivePasswordHash(password, salt, PBKDF2_ITERATIONS);
+      const logins = Array.from(new Set(
+        [typedLogin, user.email, user.username].filter(Boolean).map(l => String(l).trim().toLowerCase())
+      ));
+      const { password: _pw, ...profile } = user;
+      const cred: OfflineCredential = {
+        userId: user.id,
+        logins,
+        salt: toBase64(salt),
+        hash,
+        iterations: PBKDF2_ITERATIONS,
+        savedAt: new Date().toISOString(),
+        profile: profile as User
+      };
+      const others = this.readOfflineCredentials().filter(c => c.userId !== user.id);
+      localStorage.setItem(OFFLINE_CREDENTIALS_KEY, JSON.stringify([cred, ...others].slice(0, 20)));
+    } catch (err) {
+      console.warn('Não foi possível salvar o acesso offline:', err);
+    }
+  }
+
+  private static async verifyOfflineCredential(login: string, password: string): Promise<User | null> {
+    if (!cryptoAvailable()) return null;
+    const cred = this.readOfflineCredentials().find(c => c.logins.includes(login));
+    if (!cred) return null;
+    const ageDays = (Date.now() - new Date(cred.savedAt).getTime()) / 86400000;
+    if (ageDays > OFFLINE_VALIDITY_DAYS) return null;
+    try {
+      const hash = await derivePasswordHash(password, fromBase64(cred.salt), cred.iterations);
+      if (hash !== cred.hash) return null;
+      const localProfile = DielectricStorageService.getUsers('ALL').find(u => u.id === cred.userId);
+      if (localProfile && localProfile.active === false) return null;
+      return { ...cred.profile, ...(localProfile || {}) };
+    } catch {
+      return null;
+    }
+  }
+
+  /** Remove o acesso offline de um usuário neste aparelho. */
+  static forgetOfflineCredential(userId: string): void {
+    const rest = this.readOfflineCredentials().filter(c => c.userId !== userId);
+    localStorage.setItem(OFFLINE_CREDENTIALS_KEY, JSON.stringify(rest));
   }
 
   /**
-   * Sincroniza usuários e empresas com o Supabase Cloud para manter dropdowns e credenciais atualizadas
+   * Sincroniza usuários e empresas com o Supabase para manter as listas atualizadas
    */
   static async syncFromSupabase(): Promise<{ usersCount: number; companiesCount: number }> {
     try {
@@ -161,18 +222,9 @@ export class AuthService {
     }
   }
 
-  static quickLogin(user: User, companyId?: string): { success: boolean; user: User } {
-    const targetCompId = companyId || user.companyId || 'comp-jvm';
-    const comp = DielectricStorageService.getCompanyById(targetCompId);
-    const updatedUser: User = {
-      ...user,
-      companyId: targetCompId,
-      companyName: comp ? comp.name : user.companyName
-    };
-    this.setCurrentUser(updatedUser, true);
-    return { success: true, user: updatedUser };
-  }
-
+  // ---------------------------------------------------------------------------
+  // Sessão
+  // ---------------------------------------------------------------------------
   static getCurrentUser(): User | null {
     try {
       const raw = localStorage.getItem(this.CURRENT_USER_KEY);
@@ -185,19 +237,38 @@ export class AuthService {
     return null;
   }
 
-  static setCurrentUser(user: User, rememberMe: boolean = true): void {
+  private static getSessionToken(): string | null {
     try {
-      localStorage.setItem(this.CURRENT_USER_KEY, JSON.stringify(user));
-      localStorage.setItem(this.AUTH_TOKEN_KEY, 'jvm_session_' + Date.now());
-      
-      // Update active user in SyncEngine and set active company
-      DielectricStorageService.setCurrentUser(user);
+      return sessionStorage.getItem(this.AUTH_TOKEN_KEY) || localStorage.getItem(this.AUTH_TOKEN_KEY);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Grava o usuário da sessão. `verifiedByDatabase` só é true após a senha ser
+   * conferida (online no banco ou pela credencial offline). Trocas de empresa
+   * ou de perfil mantêm a sessão já autenticada.
+   */
+  static setCurrentUser(user: User, rememberMe: boolean = true, verifiedByDatabase: boolean = false): void {
+    try {
+      const { password: _pw, ...safeUser } = user;
+      localStorage.setItem(this.CURRENT_USER_KEY, JSON.stringify(safeUser));
+
+      if (verifiedByDatabase) {
+        const token = DB_SESSION_PREFIX + Date.now();
+        localStorage.removeItem(this.AUTH_TOKEN_KEY);
+        sessionStorage.removeItem(this.AUTH_TOKEN_KEY);
+        if (rememberMe) localStorage.setItem(this.AUTH_TOKEN_KEY, token);
+        else sessionStorage.setItem(this.AUTH_TOKEN_KEY, token);
+      }
+
+      DielectricStorageService.setCurrentUser(safeUser as User);
       if (user.companyId) {
         DielectricStorageService.setActiveCompanyById(user.companyId);
       }
 
-      // Dispatch custom event to notify components
-      window.dispatchEvent(new CustomEvent('jvm-auth-changed', { detail: { user } }));
+      window.dispatchEvent(new CustomEvent('jvm-auth-changed', { detail: { user: safeUser } }));
       window.dispatchEvent(new Event('jvm-data-changed'));
     } catch (e) {
       console.error('Error saving current user:', e);
@@ -208,6 +279,7 @@ export class AuthService {
     try {
       localStorage.removeItem(this.CURRENT_USER_KEY);
       localStorage.removeItem(this.AUTH_TOKEN_KEY);
+      sessionStorage.removeItem(this.AUTH_TOKEN_KEY);
       window.dispatchEvent(new CustomEvent('jvm-auth-changed', { detail: { user: null } }));
       window.dispatchEvent(new Event('jvm-data-changed'));
     } catch (e) {
@@ -215,7 +287,12 @@ export class AuthService {
     }
   }
 
+  /**
+   * Autenticado somente se a sessão foi aberta com usuário e senha conferidos
+   * pelo banco. Sessões antigas (login automático/sem senha) pedem novo login.
+   */
   static isAuthenticated(): boolean {
-    return this.getCurrentUser() !== null;
+    const token = this.getSessionToken();
+    return this.getCurrentUser() !== null && !!token && token.startsWith(DB_SESSION_PREFIX);
   }
 }

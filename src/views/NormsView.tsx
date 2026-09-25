@@ -164,10 +164,12 @@ export const NormsView: React.FC = () => {
   };
 
   const filteredNorms = norms.filter(n => {
+    const term = searchTerm.toLowerCase();
     const matchesSearch =
-      n.normCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      n.normName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (n.applicableEquipmentTypes && n.applicableEquipmentTypes.some(t => t.toLowerCase().includes(searchTerm.toLowerCase())));
+      !term ||
+      String(n.normCode || '').toLowerCase().includes(term) ||
+      String(n.normName || '').toLowerCase().includes(term) ||
+      (Array.isArray(n.applicableEquipmentTypes) && n.applicableEquipmentTypes.some(t => String(t).toLowerCase().includes(term)));
 
     const matchesType = filterType === 'all' || (n.applicableEquipmentTypes && n.applicableEquipmentTypes.includes(filterType as any));
     return matchesSearch && matchesType;
@@ -1825,7 +1827,7 @@ export const NormsView: React.FC = () => {
                     <p className={`text-xs font-bold uppercase mt-0.5 ${
                       isManta ? 'text-amber-700' : isTapete ? 'text-emerald-700' : 'text-slate-500'
                     }`}>
-                      {norm.applicableEquipmentTypes?.map(t => t.replace('_', ' ')).join(', ')}
+                      {norm.applicableEquipmentTypes?.map(t => String(t).replace('_', ' ')).join(', ')}
                     </p>
 
                     {/* Technical Parameters Table */}

@@ -43,7 +43,8 @@ import {
   rowToNorm,
   reportToRow,
   rowToReport,
-  auditToRow
+  auditToRow,
+  USERS_SELECT_COLUMNS
 } from './supabaseMappers';
 import schemaSql from '../../supabase/schema.sql?raw';
 
@@ -221,6 +222,7 @@ export class SupabaseService {
   private static realtimeChannel: RealtimeChannel | null = null;
   private static pullTimer: ReturnType<typeof setTimeout> | null = null;
   private static lastAutoSyncAt = 0;
+  private static usersLegacySelect = false;
 
   // ===========================================================================
   // CONFIGURAÇÃO E CLIENTE
@@ -454,6 +456,10 @@ export class SupabaseService {
       DielectricStorageService.completeSyncItems(ok.map(o => o.item));
       DielectricStorageService.failSyncItems(failed.map(f => ({ item: f.item, error: f.error })));
 
+      if (entityType === 'user' && ok.length > 0) {
+        await this.sendInitialPasswords(client, ok.map(o => o.item.entityId));
+      }
+
       result.pushed += ok.length;
       result.failed += failed.length;
       result.perEntity[entityType] = (result.perEntity[entityType] || 0) + ok.length;
@@ -579,6 +585,7 @@ export class SupabaseService {
       delete legacy.device_id;
       delete legacy.deleted_at;
       delete legacy.lab_info;
+      delete legacy.username;
       const res = await client.from(table).upsert([legacy], { onConflict: 'id', ignoreDuplicates });
       if (!res.error) return null;
       error = res.error;
@@ -598,6 +605,23 @@ export class SupabaseService {
     }
 
     return `${error?.code ? `[${error.code}] ` : ''}${error?.message || 'Erro desconhecido'}`;
+  }
+
+  /**
+   * Envia a senha inicial de usuários recém-criados pelo app. O banco só
+   * aceita se o usuário ainda não tiver senha (ver jvm_set_initial_password).
+   */
+  private static async sendInitialPasswords(client: SupabaseClient, userIds: string[]): Promise<void> {
+    const pending = DielectricStorageService.getPendingInitialPasswords();
+    for (const id of userIds) {
+      const pwd = pending[id];
+      if (!pwd) continue;
+      const { error } = await client.rpc('jvm_set_initial_password', { p_user_id: id, p_password: pwd });
+      // Sucesso, recusa definitiva ou banco sem a função: a senha sai do aparelho
+      if (!error || !/fetch|network/i.test(error.message || '')) {
+        DielectricStorageService.clearPendingInitialPassword(id);
+      }
+    }
   }
 
   /** Cria (somente se ausentes) as empresas referenciadas pelos registros. */
@@ -739,7 +763,7 @@ export class SupabaseService {
         while (true) {
           let query = client
             .from(table)
-            .select('*')
+            .select(table === 'users' && !this.usersLegacySelect ? USERS_SELECT_COLUMNS : '*')
             .order('updated_at', { ascending: true })
             .order('id', { ascending: true })
             .range(from, from + pageSize - 1);
@@ -747,6 +771,11 @@ export class SupabaseService {
 
           const { data, error } = await query;
           if (error) {
+            // Banco ainda sem a coluna "username" (script SQL não executado)
+            if (table === 'users' && !this.usersLegacySelect && isMissingColumnError(error)) {
+              this.usersLegacySelect = true;
+              continue;
+            }
             if (!isMissingTableError(error)) res.errors.push(`${table}: ${error.message}`);
             break;
           }
@@ -1071,51 +1100,52 @@ export class SupabaseService {
    * (Removidas as senhas universais que davam acesso a QUALQUER conta.)
    */
   static async authenticateWithSupabase(
-    email: string, 
-    password: string, 
+    login: string,
+    password: string,
     companyId?: string
-  ): Promise<{ success: boolean; user?: User; error?: string }> {
+  ): Promise<{ success: boolean; user?: User; error?: string; networkError?: boolean }> {
     try {
       const config = this.getConfig();
       if (!config.enabled) {
-        return { success: false, error: 'Integração com Supabase está desativada nas configurações.' };
+        return { success: false, networkError: true, error: 'Integração com Supabase está desativada nas configurações.' };
       }
 
       const client = this.getClient(config);
-      const cleanEmail = email.trim().toLowerCase();
-      const cleanPass = password.trim();
+      const cleanLogin = login.trim().toLowerCase();
 
-      const { data, error } = await client
-        .from('users')
-        .select('*')
-        .eq('email', cleanEmail)
-        .maybeSingle();
+      // Conferência da senha no servidor (senha criptografada, nunca exposta)
+      const { data, error } = await client.rpc('jvm_login', { p_login: cleanLogin, p_password: password });
 
       if (error) {
+        if (/fetch|network|Failed to/i.test(error.message || '')) {
+          return { success: false, networkError: true, error: 'Sem conexão com o banco de dados.' };
+        }
+        const missingFn = error.code === 'PGRST202' || error.code === '42883' || /Could not find the function|does not exist/i.test(error.message || '');
+        if (missingFn) {
+          return {
+            success: false,
+            error: 'O login pelo banco de dados ainda não foi ativado. Execute o arquivo supabase/schema.sql no SQL Editor do Supabase.'
+          };
+        }
         return { success: false, error: `Erro no Supabase: ${error.message}` };
       }
-      if (!data || data.deleted_at) {
-        return { success: false, error: 'Usuário não localizado no banco de dados Supabase.' };
-      }
-      if (data.active === false) {
-        return { success: false, error: 'Este usuário está inativo no Supabase. Contate o Administrador Master.' };
+
+      const payload: any = typeof data === 'string' ? JSON.parse(data) : data;
+      if (!payload || payload.ok !== true || !payload.user) {
+        return { success: false, error: payload?.error || 'Usuário ou senha inválidos.' };
       }
 
-      const validPass = !data.password_hash || data.password_hash === cleanPass;
-      if (!validPass) {
-        return { success: false, error: 'Senha incorreta.' };
-      }
-
-      const userObj = rowToUser(data);
+      const userObj = rowToUser(payload.user);
       delete (userObj as any).syncStatus;
-      userObj.companyId = companyId || userObj.companyId || 'comp-jvm';
+      const homeCompanyId = payload.user.company_id || userObj.companyId || 'comp-jvm';
+      userObj.companyId = companyId || homeCompanyId;
 
-      // Guarda localmente para login offline, sem reenviar à nuvem
-      DielectricStorageService.saveFromRemote('users', [{ ...userObj, companyId: data.company_id || userObj.companyId }]);
+      // Mantém o perfil no aparelho (sem senha) para a lista de usuários
+      DielectricStorageService.saveFromRemote('users', [{ ...userObj, companyId: homeCompanyId }]);
 
       return { success: true, user: userObj };
     } catch (err: any) {
-      return { success: false, error: err.message || 'Falha na conexão de login com o Supabase' };
+      return { success: false, networkError: true, error: err.message || 'Falha na conexão de login com o Supabase' };
     }
   }
 

@@ -1,3 +1,4 @@
+import { ViewErrorBoundary } from './components/ViewErrorBoundary';
 import React, { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
@@ -288,6 +289,7 @@ export default function App() {
           onLogout={handleLogout}
         >
           {/* Main Content inside Android App Frame (100% of fields and views preserved) */}
+          <ViewErrorBoundary resetKey={activeView} onGoHome={() => setActiveView('dashboard')}>
           {(activeView === 'dashboard' || activeView === 'android_home') && (
             <AndroidFieldModeView
               key={`android_dash_${dataVersion}`}
@@ -383,6 +385,7 @@ export default function App() {
           {activeView === 'audit' && <AuditLogsView key={`android_audit_${dataVersion}`} />}
 
           {activeView === 'backup' && <BackupSettingsView key={`android_backup_${dataVersion}`} />}
+          </ViewErrorBoundary>
         </AndroidAppShell>
 
         {/* MODAL: QR Code Live Scanner & Lookup */}
@@ -497,6 +500,7 @@ export default function App() {
 
         {/* Dynamic Content Canvas */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+          <ViewErrorBoundary resetKey={activeView} onGoHome={() => setActiveView('dashboard')}>
           {activeView === 'dashboard' && (
             <DashboardView
               key={`desk_dash_${dataVersion}`}
@@ -588,6 +592,7 @@ export default function App() {
           {activeView === 'audit' && <AuditLogsView key={`desk_audit_${dataVersion}`} />}
 
           {activeView === 'backup' && <BackupSettingsView key={`desk_backup_${dataVersion}`} />}
+          </ViewErrorBoundary>
         </main>
       </div>
 

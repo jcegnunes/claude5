@@ -37,6 +37,7 @@ export interface User {
   companyName?: string;
   name: string;
   email: string;
+  username?: string; // Nome de usuário opcional para login (além do e-mail)
   password?: string;
   role: UserRole;
   creaOrCft?: string;

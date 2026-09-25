@@ -325,6 +325,244 @@ CREATE TABLE IF NOT EXISTS public.audit_logs (
 -- =========================================================================
 -- MIGRAÇÃO PARA BANCOS JÁ EXISTENTES (versões anteriores do app)
 -- =========================================================================
+-- Garante TODAS as colunas usadas pelo app em tabelas criadas por versões antigas
+-- (sem NOT NULL/UNIQUE/FK para não falhar com dados já existentes)
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS name TEXT;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS legal_name TEXT;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS cnpj TEXT;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS inscricao_estadual TEXT;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS city TEXT;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS state TEXT;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS cep TEXT;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS logo_url TEXT;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS technical_responsible TEXT;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT true;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS lab_info JSONB;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS payload JSONB;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS device_id TEXT;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS company_id TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS company_name TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS name TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS role TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS cargo TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS registration_number TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS crea_or_cft TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS password_hash TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT true;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_master_admin BOOLEAN DEFAULT false;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS signature_url TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS custom_settings JSONB;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS payload JSONB;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS device_id TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS company_id TEXT;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS razao_social TEXT;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS nome_fantasia TEXT;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS cnpj TEXT;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS inscricao_estadual TEXT;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS telefone TEXT;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS contato_responsavel TEXT;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS endereco TEXT;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS cidade TEXT;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS estado TEXT;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS cep TEXT;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS data_cadastro TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'ativo';
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS observacoes TEXT;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS payload JSONB;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS device_id TEXT;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS company_id TEXT;
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS uuid TEXT;
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS client_id TEXT;
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS client_name TEXT;
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS service_order_id TEXT;
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS service_order_number TEXT;
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS type TEXT;
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS tag TEXT;
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS serial_number TEXT;
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS ca_number TEXT;
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS asset_number TEXT;
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS manufacturer TEXT;
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS model TEXT;
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS dielectric_class TEXT DEFAULT '0';
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS size_or_length TEXT;
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS glove_length_mm INTEGER;
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS blanket_type TEXT;
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS blanket_style TEXT;
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS blanket_dimensions TEXT;
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS matting_surface TEXT;
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS matting_thickness_mm NUMERIC(6,2);
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS matting_dimensions TEXT;
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS ladder_type TEXT;
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS ladder_rungs_count INTEGER;
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS ladder_length_extended_m NUMERIC(6,2);
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS ladder_load_capacity_kg INTEGER;
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS isolated_tools JSONB;
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'em_uso';
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS collaborator_name TEXT;
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS collaborator_registration TEXT;
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS collaborator_sector TEXT;
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS last_test_date DATE;
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS next_test_due_date DATE;
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS retest_interval_months INTEGER DEFAULT 6;
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS qr_code TEXT;
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS payload JSONB;
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS device_id TEXT;
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.equipment ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.service_orders ADD COLUMN IF NOT EXISTS company_id TEXT;
+ALTER TABLE public.service_orders ADD COLUMN IF NOT EXISTS os_number TEXT;
+ALTER TABLE public.service_orders ADD COLUMN IF NOT EXISTS client_id TEXT;
+ALTER TABLE public.service_orders ADD COLUMN IF NOT EXISTS client_name TEXT;
+ALTER TABLE public.service_orders ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'aberta';
+ALTER TABLE public.service_orders ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT 'normal';
+ALTER TABLE public.service_orders ADD COLUMN IF NOT EXISTS opened_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.service_orders ADD COLUMN IF NOT EXISTS scheduled_for DATE;
+ALTER TABLE public.service_orders ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
+ALTER TABLE public.service_orders ADD COLUMN IF NOT EXISTS technician_id TEXT;
+ALTER TABLE public.service_orders ADD COLUMN IF NOT EXISTS technician_name TEXT;
+ALTER TABLE public.service_orders ADD COLUMN IF NOT EXISTS technician_cft_crea TEXT;
+ALTER TABLE public.service_orders ADD COLUMN IF NOT EXISTS art_number TEXT;
+ALTER TABLE public.service_orders ADD COLUMN IF NOT EXISTS service_location TEXT;
+ALTER TABLE public.service_orders ADD COLUMN IF NOT EXISTS scope_description TEXT;
+ALTER TABLE public.service_orders ADD COLUMN IF NOT EXISTS equipment_ids JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.service_orders ADD COLUMN IF NOT EXISTS total_items INTEGER DEFAULT 0;
+ALTER TABLE public.service_orders ADD COLUMN IF NOT EXISTS approved_items INTEGER DEFAULT 0;
+ALTER TABLE public.service_orders ADD COLUMN IF NOT EXISTS reproved_items INTEGER DEFAULT 0;
+ALTER TABLE public.service_orders ADD COLUMN IF NOT EXISTS technical_notes TEXT;
+ALTER TABLE public.service_orders ADD COLUMN IF NOT EXISTS payload JSONB;
+ALTER TABLE public.service_orders ADD COLUMN IF NOT EXISTS device_id TEXT;
+ALTER TABLE public.service_orders ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE public.service_orders ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.service_orders ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS company_id TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS uuid TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS test_number TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS report_number TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS certificate_number TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS validation_code TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS document_hash TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS client_id TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS client_name TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS equipment_id TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS equipment_tag TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS equipment_type TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS equipment_class TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS equipment_serial TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS equipment_ca TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS collaborator_name TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS collaborator_registration TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS collaborator_sector TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS service_order_id TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS service_order_number TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS art_number TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS technician_id TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS technician_name TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS technician_cft_or_crea TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS tech_responsible_id TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS tech_responsible_name TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS tech_responsible_crea TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS test_date DATE;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS test_time TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS location TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS norm_code TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS procedure_code TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS applied_class TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS applied_voltage_kv NUMERIC(8,2);
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS voltage_type TEXT DEFAULT 'AC';
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS application_duration_seconds INTEGER;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS measured_leakage_current_ma NUMERIC(8,3);
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS leakage_current_limit_ma NUMERIC(8,3);
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS current_unit TEXT DEFAULT 'mA';
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS withstand_without_puncture BOOLEAN DEFAULT true;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS glove_length_mm INTEGER;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS matting_surface TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS matting_thickness_mm NUMERIC(6,2);
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS isolated_tools JSONB;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS tools_evaluation JSONB;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS environmental JSONB;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS visual_inspection JSONB;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS visual_inspection_passed BOOLEAN DEFAULT true;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS instruments_used JSONB;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS result TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS result_rationale TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS approved_opinion TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS reproved_opinion TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS technical_notes TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS retest_due_date DATE;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS technician_signature JSONB;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS tech_responsible_signature JSONB;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS client_signature JSONB;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS photos JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS payload JSONB;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS device_id TEXT;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.test_records ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.lab_instruments ADD COLUMN IF NOT EXISTS company_id TEXT;
+ALTER TABLE public.lab_instruments ADD COLUMN IF NOT EXISTS name TEXT;
+ALTER TABLE public.lab_instruments ADD COLUMN IF NOT EXISTS type TEXT;
+ALTER TABLE public.lab_instruments ADD COLUMN IF NOT EXISTS manufacturer TEXT;
+ALTER TABLE public.lab_instruments ADD COLUMN IF NOT EXISTS model TEXT;
+ALTER TABLE public.lab_instruments ADD COLUMN IF NOT EXISTS serial_number TEXT;
+ALTER TABLE public.lab_instruments ADD COLUMN IF NOT EXISTS tag TEXT;
+ALTER TABLE public.lab_instruments ADD COLUMN IF NOT EXISTS calibration_cert_number TEXT;
+ALTER TABLE public.lab_instruments ADD COLUMN IF NOT EXISTS calibration_date DATE;
+ALTER TABLE public.lab_instruments ADD COLUMN IF NOT EXISTS calibration_expiry_date DATE;
+ALTER TABLE public.lab_instruments ADD COLUMN IF NOT EXISTS calibration_lab TEXT;
+ALTER TABLE public.lab_instruments ADD COLUMN IF NOT EXISTS resolution TEXT;
+ALTER TABLE public.lab_instruments ADD COLUMN IF NOT EXISTS accuracy TEXT;
+ALTER TABLE public.lab_instruments ADD COLUMN IF NOT EXISTS operational_status TEXT DEFAULT 'ativo';
+ALTER TABLE public.lab_instruments ADD COLUMN IF NOT EXISTS payload JSONB;
+ALTER TABLE public.lab_instruments ADD COLUMN IF NOT EXISTS device_id TEXT;
+ALTER TABLE public.lab_instruments ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE public.lab_instruments ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.lab_instruments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.norms ADD COLUMN IF NOT EXISTS norm_code TEXT;
+ALTER TABLE public.norms ADD COLUMN IF NOT EXISTS norm_name TEXT;
+ALTER TABLE public.norms ADD COLUMN IF NOT EXISTS dielectric_class TEXT;
+ALTER TABLE public.norms ADD COLUMN IF NOT EXISTS payload JSONB;
+ALTER TABLE public.norms ADD COLUMN IF NOT EXISTS device_id TEXT;
+ALTER TABLE public.norms ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE public.norms ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.norms ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.consolidated_reports ADD COLUMN IF NOT EXISTS company_id TEXT;
+ALTER TABLE public.consolidated_reports ADD COLUMN IF NOT EXISTS report_code TEXT;
+ALTER TABLE public.consolidated_reports ADD COLUMN IF NOT EXISTS client_id TEXT;
+ALTER TABLE public.consolidated_reports ADD COLUMN IF NOT EXISTS client_name TEXT;
+ALTER TABLE public.consolidated_reports ADD COLUMN IF NOT EXISTS emission_date DATE;
+ALTER TABLE public.consolidated_reports ADD COLUMN IF NOT EXISTS payload JSONB;
+ALTER TABLE public.consolidated_reports ADD COLUMN IF NOT EXISTS device_id TEXT;
+ALTER TABLE public.consolidated_reports ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE public.consolidated_reports ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.consolidated_reports ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS company_id TEXT;
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS action TEXT;
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS user_name TEXT;
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS entity_type TEXT;
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS entity_id TEXT;
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS date_time TIMESTAMPTZ;
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS payload JSONB;
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS device_id TEXT;
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
 DO $$
 DECLARE
   t TEXT;
@@ -431,7 +669,7 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
     CREATE PUBLICATION supabase_realtime;
   END IF;
-  FOREACH t IN ARRAY ARRAY['companies','users','clients','equipment','service_orders','test_records','lab_instruments','norms','consolidated_reports']
+  FOREACH t IN ARRAY ARRAY['companies','clients','equipment','service_orders','test_records','lab_instruments','norms','consolidated_reports']
   LOOP
     BEGIN
       EXECUTE format('ALTER PUBLICATION supabase_realtime ADD TABLE public.%I', t);
@@ -455,6 +693,157 @@ CREATE POLICY "jvm_evidencias_insert" ON storage.objects FOR INSERT WITH CHECK (
 DROP POLICY IF EXISTS "jvm_evidencias_update" ON storage.objects;
 CREATE POLICY "jvm_evidencias_update" ON storage.objects FOR UPDATE USING (bucket_id = 'jvm-evidencias') WITH CHECK (bucket_id = 'jvm-evidencias');
 
+
+-- =========================================================================
+-- LOGIN PELO BANCO DE DADOS (usuário/e-mail + senha)
+-- * Senhas guardadas criptografadas (bcrypt) - nunca em texto puro
+-- * O app NÃO consegue ler a coluna password_hash
+-- * A conferência da senha é feita no servidor pela função jvm_login()
+--
+-- COMO CADASTRAR / TROCAR SENHA (Table Editor ou SQL Editor):
+--   UPDATE public.users SET password_hash = 'NovaSenha@2026'
+--    WHERE email = 'tecnico@empresa.com.br';
+--   -> a senha é criptografada automaticamente ao salvar.
+-- COMO DEFINIR UM NOME DE USUÁRIO (opcional, além do e-mail):
+--   UPDATE public.users SET username = 'joao.nunes' WHERE email = '...';
+-- COMO BLOQUEAR UM USUÁRIO:
+--   UPDATE public.users SET active = false WHERE email = '...';
+-- =========================================================================
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
+
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS username TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_unique
+  ON public.users (lower(username))
+  WHERE username IS NOT NULL AND username <> '';
+
+-- Criptografa automaticamente qualquer senha digitada em texto
+CREATE OR REPLACE FUNCTION public.jvm_hash_user_password()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = public, extensions
+AS $$
+BEGIN
+  IF TG_OP = 'UPDATE' AND (NEW.password_hash IS NULL OR NEW.password_hash = '') THEN
+    -- o app nunca apaga a senha por engano
+    NEW.password_hash := OLD.password_hash;
+  ELSIF NEW.password_hash IS NOT NULL AND NEW.password_hash <> ''
+        AND NEW.password_hash !~ '^\$2[aby]\$' THEN
+    NEW.password_hash := crypt(NEW.password_hash, gen_salt('bf', 10));
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS jvm_hash_password ON public.users;
+CREATE TRIGGER jvm_hash_password
+  BEFORE INSERT OR UPDATE ON public.users
+  FOR EACH ROW EXECUTE FUNCTION public.jvm_hash_user_password();
+
+-- Migração: criptografa as senhas antigas que estavam em texto puro
+UPDATE public.users
+   SET password_hash = password_hash
+ WHERE password_hash IS NOT NULL
+   AND password_hash <> ''
+   AND password_hash !~ '^\$2[aby]\$';
+
+-- O app (chave pública) pode ler os usuários, EXCETO a coluna de senha
+REVOKE SELECT ON public.users FROM anon, authenticated;
+GRANT SELECT (
+  id, company_id, company_name, name, email, username, role, cargo,
+  registration_number, crea_or_cft, phone, active, is_master_admin,
+  signature_url, custom_settings, payload, device_id, deleted_at,
+  created_at, updated_at
+) ON public.users TO anon, authenticated;
+
+-- ...e só grava as colunas de perfil: a senha NUNCA é gravada pelo app
+-- diretamente (somente pelas funções abaixo ou pelo painel do Supabase)
+REVOKE INSERT, UPDATE ON public.users FROM anon, authenticated;
+GRANT INSERT (
+  id, company_id, company_name, name, email, username, role, cargo,
+  registration_number, crea_or_cft, phone, active, is_master_admin,
+  signature_url, custom_settings, payload, device_id, deleted_at
+) ON public.users TO anon, authenticated;
+GRANT UPDATE (
+  company_id, company_name, name, email, username, role, cargo,
+  registration_number, crea_or_cft, phone, active, is_master_admin,
+  signature_url, custom_settings, payload, device_id, deleted_at
+) ON public.users TO anon, authenticated;
+
+-- A tabela de usuários sai do Realtime (evita trafegar a coluna de senha)
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime DROP TABLE public.users;
+EXCEPTION WHEN others THEN NULL;
+END $$;
+
+-- Login: confere e-mail/usuário + senha no servidor
+CREATE OR REPLACE FUNCTION public.jvm_login(p_login TEXT, p_password TEXT)
+RETURNS JSON
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+DECLARE
+  u public.users%ROWTYPE;
+BEGIN
+  SELECT * INTO u
+    FROM public.users
+   WHERE deleted_at IS NULL
+     AND (lower(email) = lower(trim(p_login))
+          OR (username IS NOT NULL AND lower(username) = lower(trim(p_login))))
+   LIMIT 1;
+
+  IF NOT FOUND THEN
+    PERFORM pg_sleep(0.4);
+    RETURN json_build_object('ok', false, 'error', 'Usuário ou senha inválidos.');
+  END IF;
+
+  IF u.active IS FALSE THEN
+    RETURN json_build_object('ok', false, 'error', 'Usuário inativo. Contate o administrador.');
+  END IF;
+
+  IF u.password_hash IS NULL OR u.password_hash = '' THEN
+    RETURN json_build_object('ok', false, 'error',
+      'Este usuário ainda não tem senha. Peça ao administrador para cadastrá-la no banco de dados.');
+  END IF;
+
+  IF u.password_hash <> crypt(coalesce(p_password, ''), u.password_hash) THEN
+    PERFORM pg_sleep(0.4);
+    RETURN json_build_object('ok', false, 'error', 'Usuário ou senha inválidos.');
+  END IF;
+
+  RETURN json_build_object('ok', true, 'user', to_jsonb(u) - 'password_hash');
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.jvm_login(TEXT, TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.jvm_login(TEXT, TEXT) TO anon, authenticated;
+
+-- Senha inicial de um usuário recém-cadastrado pelo app (tela "Novo Usuário").
+-- Só funciona se o usuário ainda NÃO tem senha e foi criado há menos de
+-- 15 minutos. Depois disso, a senha só muda pelo banco de dados.
+CREATE OR REPLACE FUNCTION public.jvm_set_initial_password(p_user_id TEXT, p_password TEXT)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+BEGIN
+  IF p_password IS NULL OR length(p_password) < 6 THEN
+    RETURN false;
+  END IF;
+  UPDATE public.users
+     SET password_hash = p_password
+   WHERE id = p_user_id
+     AND (password_hash IS NULL OR password_hash = '')
+     AND created_at > NOW() - INTERVAL '15 minutes';
+  RETURN FOUND;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.jvm_set_initial_password(TEXT, TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.jvm_set_initial_password(TEXT, TEXT) TO anon, authenticated;
+
 -- -------------------------------------------------------------------------
 -- DADOS INICIAIS: empresa padrão e administrador master
 -- -------------------------------------------------------------------------
@@ -463,7 +852,7 @@ VALUES (
   'comp-jvm',
   'JVM Engenharia & Treinamentos',
   'JVM Engenharia e Segurança do Trabalho Ltda',
-  '38.456.789/0001-12',
+  '29.894.500/0001-04',
   'Campinas',
   'SP',
   '(11) 98765-4321',
@@ -482,6 +871,12 @@ VALUES (
   'CREA/SP 506894123-0', 'CREA/SP 506894123-0', '(11) 98765-4321',
   'Jvm@141519', true, true
 ) ON CONFLICT (id) DO NOTHING;
+
+-- CNPJ oficial da JVM Engenharia (substitui apenas os CNPJs de demonstração)
+UPDATE public.companies
+   SET cnpj = '29.894.500/0001-04'
+ WHERE id = 'comp-jvm'
+   AND (cnpj IS NULL OR cnpj IN ('', '38.456.789/0001-12', '34.892.115/0001-80'));
 
 -- =========================================================================
 -- FIM DO SCRIPT

@@ -51,6 +51,10 @@ export const SYNC_TABLE_ORDER: SyncTable[] = [
   'audit_logs'
 ];
 
+/** Colunas de usuários liberadas para o app (a senha não é legível). */
+export const USERS_SELECT_COLUMNS =
+  'id,company_id,company_name,name,email,username,role,cargo,registration_number,crea_or_cft,phone,active,is_master_admin,signature_url,custom_settings,payload,device_id,deleted_at,created_at,updated_at';
+
 /** Tabelas baixadas do servidor (auditoria é somente envio). */
 export const PULL_TABLES: SyncTable[] = SYNC_TABLE_ORDER.filter(t => t !== 'audit_logs');
 
@@ -215,7 +219,9 @@ export function userToRow(u: User, deviceId: string): Record<string, any> {
     registration_number: u.registrationNumber || null,
     crea_or_cft: u.creaOrCft || u.registrationNumber || null,
     phone: u.phone || null,
-    password_hash: u.password || null,
+    // A senha NUNCA é enviada pelo app: é gravada criptografada pelo banco
+    // (painel do Supabase ou função jvm_set_initial_password).
+    username: u.username ? u.username.trim().toLowerCase() : null,
     active: u.active !== false,
     is_master_admin: !!u.isMasterAdmin,
     signature_url: u.signatureUrl || null,
@@ -240,7 +246,8 @@ export function rowToUser(row: any): User {
     registrationNumber: row.registration_number || p.registrationNumber || '',
     creaOrCft: row.crea_or_cft || row.registration_number || '',
     phone: row.phone || '',
-    password: row.password_hash || '',
+    username: row.username || p.username || undefined,
+    password: '', // senhas nunca ficam no aparelho
     active: row.active ?? true,
     isMasterAdmin: !!row.is_master_admin,
     signatureUrl: row.signature_url || p.signatureUrl || undefined,
@@ -680,7 +687,13 @@ export function normToRow(n: NormCriterion, deviceId: string): Record<string, an
 
 export function rowToNorm(row: any): NormCriterion {
   const p = parsePayload(row) || {};
-  return withSyncMeta<NormCriterion>({ ...p, id: row.id }, row);
+  return withSyncMeta<NormCriterion>({
+    ...p,
+    id: row.id,
+    normCode: p.normCode || row.norm_code || 'Norma',
+    normName: p.normName || row.norm_name || p.normCode || row.norm_code || 'Norma',
+    dielectricClass: p.dielectricClass || row.dielectric_class || '0'
+  }, row);
 }
 
 export function reportToRow(r: ConsolidatedReport, deviceId: string): Record<string, any> {

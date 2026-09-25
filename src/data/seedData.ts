@@ -16,7 +16,7 @@ export const INITIAL_COMPANIES: Company[] = [
     id: 'comp-jvm',
     name: 'JVM Engenharia & Treinamentos',
     legalName: 'JVM Engenharia, Inspeções e Treinamentos Técnicos Ltda.',
-    cnpj: '34.892.115/0001-80',
+    cnpj: '29.894.500/0001-04',
     creaCompanyRegister: 'CREA-SP 2145890-PJ',
     address: 'Av. das Indústrias Tecnológicas, 1420 - Módulo 04',
     number: '1420',
@@ -128,7 +128,7 @@ export const INITIAL_COMPANIES: Company[] = [
 export const JVM_COMPANY_INFO: CompanyLabInfo = {
   name: 'JVM Engenharia & Treinamentos',
   legalName: 'JVM Engenharia, Inspeções e Treinamentos Técnicos Ltda.',
-  cnpj: '34.892.115/0001-80',
+  cnpj: '29.894.500/0001-04',
   creaCompanyRegister: 'CREA-SP 2145890-PJ',
   address: 'Av. das Indústrias Tecnológicas',
   number: '1420',
