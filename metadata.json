@@ -1,0 +1,11 @@
+{
+  "name": "JVM Dielectric Lab - Ensaios \u0026 Certificação EPI/EPC_V6",
+  "description": "Plataforma profissional para ensaios dielétricos, inspeções, laudos técnicos, certificados de conformidade de EPI e EPC, rastreabilidade por QR Code e sincronização offline da JVM Engenharia \u0026 Treinamentos.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

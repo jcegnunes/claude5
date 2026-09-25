@@ -1,0 +1,67 @@
+@import "tailwindcss";
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 8mm;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 10pt;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Ocultar elementos de UI, navegação e botões na impressão */
+  header, nav, aside, .no-print, button, input, select, .print\:hidden {
+    display: none !important;
+  }
+
+  /* Desativar posições fixas e restrições de overflow do modal para permitir paginação natural */
+  .print-modal-overlay {
+    position: static !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+    display: block !important;
+    overflow: visible !important;
+  }
+
+  .print-modal-content {
+    max-width: 100% !important;
+    max-height: none !important;
+    width: 100% !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    overflow: visible !important;
+    display: block !important;
+  }
+
+  .print-sheet-area {
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    width: 100% !important;
+  }
+
+  /* Manter layout do laudo e quebras de página nítidas */
+  .page-break-inside-avoid {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .page-break-before-always {
+    break-before: always;
+    page-break-before: always;
+  }
+
+  /* Garantir fidelidade de cores de fundo e bordas na impressão */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+}

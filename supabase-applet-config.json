@@ -1,0 +1,51 @@
+{
+  "projectId": "cdtbzbshylrcprvmjpgc",
+  "projectRef": "cdtbzbshylrcprvmjpgc",
+  "appName": "JVM Dielectric Lab",
+  "supabaseUrl": "https://cdtbzbshylrcprvmjpgc.supabase.co",
+  "restUrl": "https://cdtbzbshylrcprvmjpgc.supabase.co/rest/v1",
+  "authUrl": "https://cdtbzbshylrcprvmjpgc.supabase.co/auth/v1",
+  "storageUrl": "https://cdtbzbshylrcprvmjpgc.supabase.co/storage/v1",
+  "graphqlUrl": "https://cdtbzbshylrcprvmjpgc.supabase.co/graphql/v1",
+  "anonKey": "sb_publishable_j3sUJcAb-zBEQI_S09u2Cg_X1-WJ-8M",
+  "platform": "web",
+  "database": {
+    "engine": "PostgreSQL",
+    "version": "15",
+    "schemas": [
+      "public"
+    ],
+    "tables": [
+      "companies",
+      "users",
+      "clients",
+      "equipment",
+      "service_orders",
+      "test_records",
+      "lab_instruments",
+      "norms",
+      "consolidated_reports",
+      "audit_logs"
+    ]
+  },
+  "features": {
+    "rowLevelSecurity": true,
+    "realtime": true,
+    "autoSync": true,
+    "offlineFirst": true,
+    "bidirectionalSync": true
+  },
+  "metadata": {
+    "labName": "JVM Dielectric Lab - Gestão de Ensaios Dielétricos",
+    "normsSupported": [
+      "NBR 10622 (Luvas Isolantes)",
+      "NBR 10624 (Mangas Isolantes)",
+      "ASTM D120 (Insulating Gloves)",
+      "ASTM D178-22 (Rubber Insulating Matting - 100mA)",
+      "NBR 14039 (Instalações Elétricas)",
+      "NR-10 (Segurança em Instalações e Serviços em Eletricidade)"
+    ],
+    "createdAt": "2026-09-22T16:44:27-07:00"
+  },
+  "storageBucket": "jvm-evidencias"
+}
