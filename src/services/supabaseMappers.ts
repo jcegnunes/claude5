@@ -99,7 +99,7 @@ function sanitizeInt(val: any): number | null {
 
 /** Remove undefined recursivamente (JSONB não aceita) e campos puramente locais. */
 export function cleanPayload<T extends Record<string, any>>(obj: T, omit: string[] = []): Record<string, any> {
-  const skip = new Set(['syncStatus', ...omit]);
+  const skip = new Set(['syncStatus', '_serverUpdatedAt', ...omit]);
   const walk = (v: any): any => {
     if (v === undefined) return undefined;
     if (v === null || typeof v !== 'object') return v;
@@ -136,6 +136,9 @@ function withSyncMeta<T>(obj: any, row: any): T {
     delete out.deletedAt;
   }
   out.syncStatus = 'synced';
+  // Versão do servidor em que o registro local se baseia (texto exato do banco,
+  // sem passar por Date para não perder os microssegundos)
+  if (row.updated_at) out._serverUpdatedAt = row.updated_at;
   return out as T;
 }
 
@@ -673,9 +676,22 @@ export function rowToInstrument(row: any): LabInstrument {
 // ---------------------------------------------------------------------------
 // NORMS / REPORTS / AUDIT (armazenados integralmente no payload)
 // ---------------------------------------------------------------------------
+/**
+ * Normas: a versão oficial (company_id nulo) é comum a todas as empresas.
+ * Quando uma empresa edita/cria/exclui uma norma, grava uma linha própria
+ * (id "<empresa>::<norma>") que substitui a oficial SOMENTE para ela.
+ * No app o id da norma não muda (norm_id), então os ensaios continuam ligados.
+ */
+export function normRowId(normId: string, companyId?: string | null): string {
+  return companyId ? `${companyId}::${normId}` : normId;
+}
+
 export function normToRow(n: NormCriterion, deviceId: string): Record<string, any> {
+  const companyId = n.companyId || null;
   return {
-    id: n.id,
+    id: normRowId(n.id, companyId),
+    norm_id: n.id,
+    company_id: companyId,
     norm_code: n.normCode || null,
     norm_name: (n as any).normName || null,
     dielectric_class: n.dielectricClass || null,
@@ -689,7 +705,8 @@ export function rowToNorm(row: any): NormCriterion {
   const p = parsePayload(row) || {};
   return withSyncMeta<NormCriterion>({
     ...p,
-    id: row.id,
+    id: row.norm_id || p.id || row.id,
+    companyId: row.company_id || undefined,
     normCode: p.normCode || row.norm_code || 'Norma',
     normName: p.normName || row.norm_name || p.normCode || row.norm_code || 'Norma',
     dielectricClass: p.dielectricClass || row.dielectric_class || '0'

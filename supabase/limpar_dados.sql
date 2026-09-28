@@ -22,6 +22,8 @@ DELETE FROM public.service_orders;
 DELETE FROM public.equipment;
 DELETE FROM public.lab_instruments;
 DELETE FROM public.clients;
+-- contas de login (Supabase Auth) dos usuários do app
+DELETE FROM auth.users WHERE id IN (SELECT auth_user_id FROM public.users WHERE auth_user_id IS NOT NULL);
 DELETE FROM public.users;
 DELETE FROM public.companies;
 -- DELETE FROM public.norms;

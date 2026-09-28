@@ -171,6 +171,8 @@ export function getDefaultGloveLengthForClass(classe: DielectricClass | string):
  * Calcula a corrente máxima de fuga permitida (mArms) conforme Tabela 4 da NBR 16295.
  * REGRA TÉCNICA JVM: Para os critérios das luvas isolantes, considera-se o DOBRO da corrente de fuga
  * permitida pela Tabela 4 da ABNT NBR 16295, pois o ensaio é realizado em duas luvas simultâneas na cuba.
+ * Regra confirmada pelo laboratório em 28/09/2026 como o procedimento adotado (a corrente
+ * registrada no ensaio é a do par, medida em conjunto).
  * Inclui o acréscimo de +2 mA por luva (+4 mA para o par) caso haja condicionamento para absorção de umidade (Nota c da Tabela 4).
  */
 export function getNBR16295MaxLeakageCurrent(

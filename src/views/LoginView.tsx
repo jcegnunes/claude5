@@ -17,7 +17,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(() => AuthService.consumeLogoutReason());
   const [showForgot, setShowForgot] = useState(false);
 
   // E-mail do administrador: o da empresa cadastrada neste aparelho, se houver
@@ -184,7 +184,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             </div>
           )}
         </div>
-        <p className="text-center text-[11px] text-[#98A2AE] mt-4">Versão 6.5</p>
+        <p className="text-center text-[11px] text-[#98A2AE] mt-4">Versão {__APP_VERSION__}</p>
       </main>
     </div>
   );

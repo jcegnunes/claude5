@@ -7,6 +7,7 @@ import {
   TABELA_4_NBR_16295 
 } from './nbr16295Service';
 import {
+  TAPETE_LEAKAGE_LIMIT_MA,
   getASTMD1048Entry,
   getASTMD178Entry,
   BlanketType,
@@ -197,7 +198,7 @@ export function evaluateDielectricTest(input: NormEvaluationInput): NormEvaluati
   } else if (input.equipmentType === 'manta_isolante') {
     normReferenceClause = 'ASTM D1048-14 (Itens 18.1 a 18.3 / Tabelas 1 e 2)';
   } else if (input.equipmentType === 'tapete_isolante') {
-    appliedLimit = 100.0;
+    appliedLimit = TAPETE_LEAKAGE_LIMIT_MA;
     normReferenceClause = 'ASTM D178-22 (Itens 18.1 e 18.2 / Tabelas 1 e 2 - Limite de fuga adotado: 100 mA)';
   } else if (input.equipmentType === 'escada_isolada') {
     const ladderNorm = getLadderNormEntry(input.ladderTestMethod || 'segmento_300mm_100kv');

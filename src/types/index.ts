@@ -493,7 +493,7 @@ export interface AuditLog {
 
 export interface SyncConflict {
   id: string;
-  entityType: 'client' | 'equipment' | 'service_order' | 'test' | 'norm';
+  entityType: 'client' | 'equipment' | 'service_order' | 'test' | 'norm' | 'instrument' | 'report';
   entityId: string;
   entityName: string;
   createdAt: string;

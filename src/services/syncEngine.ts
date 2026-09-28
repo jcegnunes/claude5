@@ -25,29 +25,27 @@ import {
   JVM_COMPANY_INFO
 } from '../data/seedData';
 import { DEFAULT_VALIDATION_BASE_URL, normalizeValidationBaseUrl } from '../config/validationPortalConfig';
+import {
+  NumberKind,
+  NumberBlockState,
+  NUMBER_KINDS,
+  BLOCK_SIZE,
+  REFILL_THRESHOLD,
+  addRange,
+  blockKey,
+  currentPeriod,
+  deviceTag,
+  fallbackNumber,
+  formatNumber,
+  maxSequence,
+  remaining,
+  takeFromBlocks
+} from './numberBlocks';
+import { STORAGE_KEYS } from './storageKeys';
+import { TAPETE_LEAKAGE_LIMIT_MA } from './astmBlanketMattingService';
+import { isManaged, storeGet, storeHas, storeRemove, storeSet } from './localStore';
 
-const STORAGE_KEYS = {
-  COMPANIES: 'jvm_dielectric_companies',
-  ACTIVE_COMPANY: 'jvm_dielectric_active_company',
-  CLIENTS: 'jvm_dielectric_clients',
-  EQUIPMENT: 'jvm_dielectric_equipment',
-  SERVICE_ORDERS: 'jvm_dielectric_os',
-  INSTRUMENTS: 'jvm_dielectric_instruments',
-  NORMS: 'jvm_dielectric_norms',
-  TESTS: 'jvm_dielectric_tests',
-  USERS: 'jvm_dielectric_users',
-  AUDIT: 'jvm_dielectric_audit',
-  CONFLICTS: 'jvm_dielectric_conflicts',
-  COMPANY: 'jvm_dielectric_company',
-  CURRENT_USER: 'jvm_dielectric_current_user',
-  DEVICE_ID: 'jvm_dielectric_device_id',
-  SYNC_QUEUE: 'jvm_dielectric_sync_queue',
-  LAST_SYNC: 'jvm_dielectric_last_sync',
-  REPORTS: 'jvm_dielectric_consolidated_reports',
-  PULL_CURSORS: 'jvm_dielectric_pull_cursors',
-  BOOTSTRAP_V61: 'jvm_dielectric_supabase_bootstrap_v61',
-  IDB_MIGRATED_V61: 'jvm_dielectric_idb_migrated_v61'
-};
+
 
 export const LEGACY_IDB_NAME = 'jvm_dielectric_lab_offline_db';
 
@@ -141,9 +139,35 @@ export function scheduleCloudSync(delayMs: number = 1500): void {
   }, delayMs);
 }
 
+/**
+ * Ao salvar por cima de um registro, mantém a versão do servidor em que ele se
+ * baseia (_serverUpdatedAt): é ela que permite detectar conflito de edição.
+ */
+function keepServerVersion<T>(existing: any, updated: T): T {
+  if (existing && existing._serverUpdatedAt && !(updated as any)._serverUpdatedAt) {
+    return { ...(updated as any), _serverUpdatedAt: existing._serverUpdatedAt };
+  }
+  return updated;
+}
+
+/** A chave já existe no armazenamento local (IndexedDB ou localStorage)? */
+function hasLocal(key: string): boolean {
+  if (isManaged(key)) return storeHas(key);
+  try { return localStorage.getItem(key) !== null; } catch { return false; }
+}
+
+function removeLocal(key: string): void {
+  if (isManaged(key)) { storeRemove(key); return; }
+  try { localStorage.removeItem(key); } catch {}
+}
+
 // Storage helpers with quota protection
 function getLocal<T>(key: string, fallback: T): T {
   if (typeof window === 'undefined') return fallback;
+  if (isManaged(key)) {
+    const value = storeGet<T>(key);
+    return value === undefined || value === null ? fallback : value;
+  }
   try {
     const item = localStorage.getItem(key);
     return item ? JSON.parse(item) : fallback;
@@ -155,6 +179,10 @@ function getLocal<T>(key: string, fallback: T): T {
 
 function setLocal<T>(key: string, data: T): boolean {
   if (typeof window === 'undefined') return false;
+  if (isManaged(key)) {
+    storeSet(key, data);
+    return true;
+  }
   try {
     localStorage.setItem(key, JSON.stringify(data));
     return true;
@@ -213,7 +241,7 @@ export class DielectricStorageService {
 
     this.resetDemoDataOnce();
 
-    if (!localStorage.getItem(STORAGE_KEYS.NORMS)) {
+    if (!hasLocal(STORAGE_KEYS.NORMS)) {
       setLocal(STORAGE_KEYS.NORMS, INITIAL_NORMS);
     } else {
       // Auto-migrate or update existing norms, ensuring all seed norms (ASTM D178-22, ASTM D1048, NBR 16295 Tabela 4) are present
@@ -239,12 +267,12 @@ export class DielectricStorageService {
           }
           if (n.applicableEquipmentTypes?.includes('tapete_isolante')) {
             const seedMatch = INITIAL_NORMS.find(sn => sn.id === n.id || (sn.applicableEquipmentTypes.includes('tapete_isolante') && sn.dielectricClass === n.dielectricClass));
-            if (seedMatch && (n.maxLeakageCurrent !== 100 || n.notes !== seedMatch.notes)) {
+            if (seedMatch && (n.maxLeakageCurrent !== TAPETE_LEAKAGE_LIMIT_MA || n.notes !== seedMatch.notes)) {
               updated = true;
               return {
                 ...n,
                 ...seedMatch,
-                maxLeakageCurrent: 100.0,
+                maxLeakageCurrent: TAPETE_LEAKAGE_LIMIT_MA,
                 notes: seedMatch.notes,
                 history: n.history || seedMatch.history
               };
@@ -287,7 +315,7 @@ export class DielectricStorageService {
         console.warn('Tests migration notice:', tErr);
       }
     }
-    if (!localStorage.getItem(STORAGE_KEYS.COMPANIES)) {
+    if (!hasLocal(STORAGE_KEYS.COMPANIES)) {
       setLocal(STORAGE_KEYS.COMPANIES, INITIAL_COMPANIES);
     } else {
       // Ensure seed companies are always present
@@ -306,28 +334,28 @@ export class DielectricStorageService {
       }
     }
     // Empresa ativa: definida no login / cadastro da empresa (sem padrão)
-    if (!localStorage.getItem(STORAGE_KEYS.CLIENTS)) {
+    if (!hasLocal(STORAGE_KEYS.CLIENTS)) {
       setLocal(STORAGE_KEYS.CLIENTS, INITIAL_CLIENTS);
     }
-    if (!localStorage.getItem(STORAGE_KEYS.EQUIPMENT)) {
+    if (!hasLocal(STORAGE_KEYS.EQUIPMENT)) {
       setLocal(STORAGE_KEYS.EQUIPMENT, INITIAL_EQUIPMENT);
     }
-    if (!localStorage.getItem(STORAGE_KEYS.SERVICE_ORDERS)) {
+    if (!hasLocal(STORAGE_KEYS.SERVICE_ORDERS)) {
       setLocal(STORAGE_KEYS.SERVICE_ORDERS, INITIAL_SERVICE_ORDERS);
     }
-    if (!localStorage.getItem(STORAGE_KEYS.INSTRUMENTS)) {
+    if (!hasLocal(STORAGE_KEYS.INSTRUMENTS)) {
       setLocal(STORAGE_KEYS.INSTRUMENTS, INITIAL_INSTRUMENTS);
     }
-    if (!localStorage.getItem(STORAGE_KEYS.TESTS)) {
+    if (!hasLocal(STORAGE_KEYS.TESTS)) {
       setLocal(STORAGE_KEYS.TESTS, INITIAL_TEST_RECORDS);
     }
-    if (!localStorage.getItem(STORAGE_KEYS.USERS)) {
+    if (!hasLocal(STORAGE_KEYS.USERS)) {
       setLocal(STORAGE_KEYS.USERS, INITIAL_USERS);
     }
-    if (!localStorage.getItem(STORAGE_KEYS.AUDIT)) {
+    if (!hasLocal(STORAGE_KEYS.AUDIT)) {
       setLocal(STORAGE_KEYS.AUDIT, INITIAL_AUDIT_LOGS);
     }
-    if (!localStorage.getItem(STORAGE_KEYS.COMPANY)) {
+    if (!hasLocal(STORAGE_KEYS.COMPANY)) {
       setLocal(STORAGE_KEYS.COMPANY, JVM_COMPANY_INFO);
     }
     // Sem login automático: a sessão só existe após autenticação no banco.
@@ -434,7 +462,7 @@ export class DielectricStorageService {
         STORAGE_KEYS.PULL_CURSORS, STORAGE_KEYS.BOOTSTRAP_V61,
         STORAGE_KEYS.CURRENT_USER, 'jvm_auth_token', 'jvm_offline_credentials',
         'jvm_pending_initial_passwords'
-      ].forEach(k => localStorage.removeItem(k));
+      ].forEach(k => removeLocal(k));
       try { sessionStorage.removeItem('jvm_auth_token'); } catch {}
       localStorage.setItem(FLAG, new Date().toISOString());
       // O antigo IndexedDB também só guardava dados de demonstração/cache
@@ -641,12 +669,9 @@ export class DielectricStorageService {
     const activeComp = this.getActiveCompany();
     const targetCompId = user.companyId || activeComp.id;
 
-    // A senha informada vira "senha inicial" enviada ao banco (criptografada lá)
-    // e nunca é guardada na lista local de usuários.
-    const { password: typedPassword, ...userWithoutPassword } = user;
-    if (typedPassword && typedPassword.trim()) {
-      this.setPendingInitialPassword(user.id, typedPassword.trim());
-    }
+    // Senhas nunca ficam no aparelho: são cadastradas no banco de dados
+    // (SQL Editor do Supabase) e conferidas pelo Supabase Auth.
+    const { password: _typedPassword, ...userWithoutPassword } = user;
 
     const updatedUser: User = {
       ...(userWithoutPassword as User),
@@ -669,25 +694,9 @@ export class DielectricStorageService {
     return updatedUser;
   }
 
-  // ---------------------------------------------------------------------------
-  // Senha inicial de usuários recém-criados (mantida só até ser enviada ao banco)
-  // ---------------------------------------------------------------------------
-  private static PENDING_PASSWORDS_KEY = 'jvm_pending_initial_passwords';
-
-  static setPendingInitialPassword(userId: string, password: string): void {
-    const all = getLocal<Record<string, string>>(this.PENDING_PASSWORDS_KEY, {});
-    all[userId] = password;
-    setLocal(this.PENDING_PASSWORDS_KEY, all);
-  }
-
-  static getPendingInitialPasswords(): Record<string, string> {
-    return getLocal<Record<string, string>>(this.PENDING_PASSWORDS_KEY, {});
-  }
-
-  static clearPendingInitialPassword(userId: string): void {
-    const all = getLocal<Record<string, string>>(this.PENDING_PASSWORDS_KEY, {});
-    delete all[userId];
-    setLocal(this.PENDING_PASSWORDS_KEY, all);
+  /** Remove senhas em texto puro guardadas por versões anteriores (até v6.5). */
+  static clearLegacyPendingPasswords(): void {
+    try { localStorage.removeItem('jvm_pending_initial_passwords'); } catch {}
   }
 
   // Company Info
@@ -927,7 +936,7 @@ export class DielectricStorageService {
       all.unshift(updatedEq);
       this.addAuditLog('CADASTRO', 'Equipamento', equipment.id, `Novo equipamento cadastrado: Tag ${equipment.tag} (${equipment.type})`, undefined, undefined, targetCompId);
     } else {
-      all[existingIdx] = updatedEq;
+      all[existingIdx] = keepServerVersion(all[existingIdx], updatedEq);
       this.addAuditLog('ALTERACAO', 'Equipamento', equipment.id, `Equipamento atualizado: Tag ${equipment.tag}`, undefined, undefined, targetCompId);
     }
 
@@ -999,34 +1008,7 @@ export class DielectricStorageService {
   }
 
   static generateNextOSNumber(): string {
-    // Busca todas as ordens de serviço de todas as empresas para garantir unicidade absoluta
-    const allOrders = this.getServiceOrders('ALL');
-    const now = new Date();
-    const shortYear = String(now.getFullYear()).slice(-2); // Ex: '26'
-    const currentYear = now.getFullYear();
-    const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
-    const yearMonth = `${shortYear}${currentMonth}`; // Ex: '2608'
-    const fullYearMonth = `${currentYear}${currentMonth}`; // Ex: '202608'
-
-    const currentOrders = allOrders
-      .filter(o => o.osNumber && (o.osNumber.includes(yearMonth) || o.osNumber.includes(fullYearMonth) || o.osNumber.startsWith('OS-')))
-      .map(o => {
-        const matchYM = o.osNumber.match(new RegExp(`(?:${yearMonth}|${fullYearMonth})[-_]?(\\d+)`));
-        if (matchYM && matchYM[1]) {
-          return parseInt(matchYM[1], 10) || 0;
-        }
-        const matchEnd = o.osNumber.match(/(\d{1,6})$/);
-        return matchEnd ? parseInt(matchEnd[1], 10) || 0 : 0;
-      });
-    let maxNum = currentOrders.length > 0 ? Math.max(...currentOrders) : 0;
-    
-    // Gera o próximo número e garante que não colide com nenhuma OS existente
-    let candidate = `OS-${yearMonth}-${String(maxNum + 1).padStart(4, '0')}`;
-    while (allOrders.some(o => o.osNumber === candidate)) {
-      maxNum++;
-      candidate = `OS-${yearMonth}-${String(maxNum + 1).padStart(4, '0')}`;
-    }
-    return candidate;
+    return this.nextSequentialNumber('os', 'OS-');
   }
 
   /**
@@ -1116,7 +1098,7 @@ export class DielectricStorageService {
       all.unshift(updatedOS);
       this.addAuditLog('CADASTRO', 'OrdemDeServico', os.id, `Nova OS aberta: ${os.osNumber} para ${updatedOS.clientName}`, undefined, undefined, targetCompId);
     } else {
-      all[existingIdx] = updatedOS;
+      all[existingIdx] = keepServerVersion(all[existingIdx], updatedOS);
       this.addAuditLog('ALTERACAO', 'OrdemDeServico', os.id, `OS atualizada: ${os.osNumber} (Status: ${os.status})`, undefined, undefined, targetCompId);
     }
 
@@ -1199,7 +1181,7 @@ export class DielectricStorageService {
       instruments.unshift(updatedInst);
       this.addAuditLog('CADASTRO', 'InstrumentoEnsaio', inst.id, `Instrumento cadastrado: ${inst.type} - ${inst.model} (Calibração ${inst.calibrationCertNumber})`, undefined, undefined, targetCompId);
     } else {
-      instruments[existingIdx] = updatedInst;
+      instruments[existingIdx] = keepServerVersion(instruments[existingIdx], updatedInst);
       this.addAuditLog('ALTERACAO', 'InstrumentoEnsaio', inst.id, `Instrumento atualizado: ${inst.type} - ${inst.model}`, undefined, undefined, targetCompId);
     }
     setLocal(STORAGE_KEYS.INSTRUMENTS, instruments);
@@ -1281,6 +1263,13 @@ export class DielectricStorageService {
     const existingIdx = allNorms.findIndex(n => n.id === norm.id);
     const currentUser = this.getCurrentUser();
     (norm as any).updatedAt = new Date().toISOString();
+    // A alteração vale somente para a empresa de quem editou (a norma oficial não muda)
+    norm.companyId = this.getSessionCompanyId() || norm.companyId;
+    // Tapetes isolantes: limite de fuga fixo (ver TAPETE_LEAKAGE_LIMIT_MA)
+    if (norm.applicableEquipmentTypes?.includes('tapete_isolante')) {
+      norm.maxLeakageCurrent = TAPETE_LEAKAGE_LIMIT_MA;
+      norm.currentUnit = 'mA';
+    }
 
     if (existingIdx < 0) {
       allNorms.unshift(norm);
@@ -1308,6 +1297,8 @@ export class DielectricStorageService {
     const allNorms = getLocal<NormCriterion[]>(STORAGE_KEYS.NORMS, INITIAL_NORMS);
     const norm = allNorms.find(n => n.id === id);
     if (norm) {
+      // Exclusão vale somente para esta empresa: a norma oficial continua para as demais
+      norm.companyId = this.getSessionCompanyId() || norm.companyId;
       norm.deletedAt = new Date().toISOString();
       (norm as any).updatedAt = norm.deletedAt;
       setLocal(STORAGE_KEYS.NORMS, allNorms);
@@ -1375,80 +1366,89 @@ export class DielectricStorageService {
   }
 
   static generateNextTestNumber(): string {
-    const tests = this.getTests();
-    const now = new Date();
-    const shortYear = String(now.getFullYear()).slice(-2); // Ex: '26'
-    const currentYear = now.getFullYear();
-    const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
-    const yearMonth = `${shortYear}${currentMonth}`; // Ex: '2608'
-    const fullYearMonth = `${currentYear}${currentMonth}`; // Ex: '202608'
-
-    const seqs = tests
-      .filter(t => t.testNumber && (t.testNumber.includes(yearMonth) || t.testNumber.includes(fullYearMonth) || t.testNumber.startsWith('ENS-')))
-      .map(t => {
-        const matchYM = t.testNumber.match(new RegExp(`(?:${yearMonth}|${fullYearMonth})[-_]?(\\d+)`));
-        if (matchYM && matchYM[1]) {
-          return parseInt(matchYM[1], 10) || 0;
-        }
-        const matchEnd = t.testNumber.match(/(\d{1,6})$/);
-        return matchEnd ? parseInt(matchEnd[1], 10) || 0 : 0;
-      });
-    const nextNum = (seqs.length > 0 ? Math.max(...seqs) : 0) + 1;
-    return `ENS-${yearMonth}-${String(nextNum).padStart(4, '0')}`;
+    return this.nextSequentialNumber('test', 'ENS-');
   }
 
   static generateNextReportNumber(): string {
-    const tests = this.getTests();
-    const company = this.getCompanyInfo();
-    const now = new Date();
-    const shortYear = String(now.getFullYear()).slice(-2); // Ex: '26'
-    const currentYear = now.getFullYear();
-    const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
-    const yearMonth = `${shortYear}${currentMonth}`; // Ex: '2608'
-    const fullYearMonth = `${currentYear}${currentMonth}`; // Ex: '202608'
-
-    let rawPrefix = company?.certificateEmissionSettings?.reportPrefix?.trim() || 'LAU-';
-    const prefix = rawPrefix.endsWith('-') ? rawPrefix : `${rawPrefix}-`;
-
-    const seqs = tests
-      .filter(t => t.reportNumber && (t.reportNumber.includes(yearMonth) || t.reportNumber.includes(fullYearMonth) || t.reportNumber.startsWith(prefix) || t.reportNumber.startsWith('LAU-')))
-      .map(t => {
-        const matchYM = t.reportNumber.match(new RegExp(`(?:${yearMonth}|${fullYearMonth})[-_]?(\\d+)`));
-        if (matchYM && matchYM[1]) {
-          return parseInt(matchYM[1], 10) || 0;
-        }
-        const matchEnd = t.reportNumber.match(/(\d{1,6})$/);
-        return matchEnd ? parseInt(matchEnd[1], 10) || 0 : 0;
-      });
-    const nextNum = (seqs.length > 0 ? Math.max(...seqs) : 0) + 1;
-    return `${prefix}${yearMonth}-${String(nextNum).padStart(4, '0')}`;
+    const rawPrefix = this.getCompanyInfo()?.certificateEmissionSettings?.reportPrefix?.trim() || 'LAU-';
+    return this.nextSequentialNumber('report', rawPrefix.endsWith('-') ? rawPrefix : `${rawPrefix}-`);
   }
 
   static generateNextCertificateNumber(): string {
-    const tests = this.getTests();
-    const company = this.getCompanyInfo();
-    const now = new Date();
-    const shortYear = String(now.getFullYear()).slice(-2); // Ex: '26'
-    const currentYear = now.getFullYear();
-    const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
-    const yearMonth = `${shortYear}${currentMonth}`; // Ex: '2608'
-    const fullYearMonth = `${currentYear}${currentMonth}`; // Ex: '202608'
+    const rawPrefix = this.getCompanyInfo()?.certificateEmissionSettings?.certificatePrefix?.trim() || 'CERT-';
+    return this.nextSequentialNumber('certificate', rawPrefix.endsWith('-') ? rawPrefix : `${rawPrefix}-`);
+  }
 
-    let rawPrefix = company?.certificateEmissionSettings?.certificatePrefix?.trim() || 'CERT-';
-    const prefix = rawPrefix.endsWith('-') ? rawPrefix : `${rawPrefix}-`;
+  // ---------------------------------------------------------------------------
+  // Numeração sem duplicidade entre aparelhos (ver numberBlocks.ts)
+  // ---------------------------------------------------------------------------
+  private static existingNumbers(kind: NumberKind): string[] {
+    switch (kind) {
+      case 'os': return this.getServiceOrders('ALL').map(o => o.osNumber);
+      case 'test': return this.getTests().map(t => t.testNumber);
+      case 'report': return this.getTests().map(t => t.reportNumber);
+      case 'certificate': return this.getTests().map(t => t.certificateNumber || '');
+    }
+  }
 
-    const seqs = tests
-      .filter(t => t.certificateNumber && (t.certificateNumber.includes(yearMonth) || t.certificateNumber.includes(fullYearMonth) || t.certificateNumber.startsWith(prefix) || t.certificateNumber.startsWith('CERT-')))
-      .map(t => {
-        const matchYM = t.certificateNumber!.match(new RegExp(`(?:${yearMonth}|${fullYearMonth})[-_]?(\\d+)`));
-        if (matchYM && matchYM[1]) {
-          return parseInt(matchYM[1], 10) || 0;
-        }
-        const matchEnd = t.certificateNumber!.match(/(\d{1,6})$/);
-        return matchEnd ? parseInt(matchEnd[1], 10) || 0 : 0;
-      });
-    const nextNum = (seqs.length > 0 ? Math.max(...seqs) : 0) + 1;
-    return `${prefix}${yearMonth}-${String(nextNum).padStart(4, '0')}`;
+  private static numberingCompanyId(): string {
+    return this.getSessionCompanyId() || this.getActiveCompany().id;
+  }
+
+  private static nextSequentialNumber(kind: NumberKind, prefix: string): string {
+    const period = currentPeriod();
+    const key = blockKey(this.numberingCompanyId(), kind);
+    const existing = this.existingNumbers(kind).filter(Boolean);
+    const used = new Set(existing);
+
+    // 1. Número da faixa reservada no servidor
+    let state = getLocal<NumberBlockState>(STORAGE_KEYS.NUMBER_BLOCKS, {});
+    let candidate: string | null = null;
+    while (candidate === null) {
+      const taken = takeFromBlocks(state, key);
+      state = taken.state;
+      if (taken.value === null) break;
+      const formatted = formatNumber(prefix, period, taken.value);
+      if (!used.has(formatted)) candidate = formatted;
+    }
+    setLocal(STORAGE_KEYS.NUMBER_BLOCKS, state);
+    if (remaining(state, key) < REFILL_THRESHOLD[kind] && typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('jvm-number-refill'));
+    }
+    if (candidate) return candidate;
+
+    // 2. Faixa esgotada sem internet: contingência com o sufixo deste aparelho
+    const tag = deviceTag(getDeviceId());
+    let next = maxSequence(existing, period) + 1;
+    let fallback = fallbackNumber(prefix, period, next, tag);
+    while (used.has(fallback)) {
+      next++;
+      fallback = fallbackNumber(prefix, period, next, tag);
+    }
+    return fallback;
+  }
+
+  /** Tipos de numeração que precisam de nova faixa (usado pela sincronização). */
+  static getNumberRefillRequests(): Array<{ kind: NumberKind; quantity: number; localMax: number; period: string }> {
+    const period = currentPeriod();
+    const state = getLocal<NumberBlockState>(STORAGE_KEYS.NUMBER_BLOCKS, {});
+    const companyId = this.numberingCompanyId();
+    if (!companyId) return [];
+    return NUMBER_KINDS
+      .filter(kind => remaining(state, blockKey(companyId, kind)) < REFILL_THRESHOLD[kind])
+      .map(kind => ({
+        kind,
+        quantity: BLOCK_SIZE[kind],
+        localMax: maxSequence(this.existingNumbers(kind), period),
+        period
+      }));
+  }
+
+  /** Guarda a faixa de números reservada no servidor. */
+  static addNumberRange(kind: NumberKind, start: number, end: number): void {
+    const key = blockKey(this.numberingCompanyId(), kind);
+    const state = getLocal<NumberBlockState>(STORAGE_KEYS.NUMBER_BLOCKS, {});
+    setLocal(STORAGE_KEYS.NUMBER_BLOCKS, addRange(state, key, start, end));
   }
 
   static generateValidationCode(): string {
@@ -1457,9 +1457,10 @@ export class DielectricStorageService {
     const shortYear = String(now.getFullYear()).slice(-2); // Ex: '26'
     const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
     let code = `VAL-JVM-${shortYear}${currentMonth}-`;
-    for (let i = 0; i < 6; i++) {
-      code += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
+    // Código público do QR Code: precisa ser imprevisível (32^8 combinações)
+    const random = new Uint8Array(8);
+    crypto.getRandomValues(random);
+    random.forEach(b => { code += chars.charAt(b % chars.length); });
     return code;
   }
 
@@ -1580,7 +1581,7 @@ export class DielectricStorageService {
         }
       }
     } else {
-      tests[existingIdx] = updatedTest;
+      tests[existingIdx] = keepServerVersion(tests[existingIdx], updatedTest);
       this.addAuditLog('ALTERACAO', 'EnsaioDielétrico', test.id, `Ensaio ${test.testNumber} atualizado`, undefined, undefined, targetCompId);
 
       // Ensure equipment and OS link are maintained on test edit
@@ -1679,7 +1680,7 @@ export class DielectricStorageService {
       reports.unshift(updatedReport);
       this.addAuditLog('CADASTRO', 'RelatórioConsolidado', report.id, `Relatório Técnico ${report.reportCode} gerado para ${report.clientName} com ${report.testIds.length} laudos vinculados`, undefined, undefined, targetCompId);
     } else {
-      reports[existingIdx] = updatedReport;
+      reports[existingIdx] = keepServerVersion(reports[existingIdx], updatedReport);
       this.addAuditLog('ALTERACAO', 'RelatórioConsolidado', report.id, `Relatório Técnico ${report.reportCode} atualizado`, undefined, undefined, targetCompId);
     }
 
@@ -1969,6 +1970,20 @@ export class DielectricStorageService {
         setLocal(key, filtered);
       }
     });
+    // Normas editadas por outra empresa: a versão oficial volta (semente local +
+    // novo download completo das normas)
+    const norms = getLocal<NormCriterion[]>(STORAGE_KEYS.NORMS, []);
+    if (Array.isArray(norms)) {
+      const keptNorms = norms.filter(n => n && (!n.companyId || n.companyId === companyId));
+      if (keptNorms.length !== norms.length) {
+        removed += norms.length - keptNorms.length;
+        setLocal(STORAGE_KEYS.NORMS, keptNorms);
+        const cursors = getLocal<Record<string, string>>(STORAGE_KEYS.PULL_CURSORS, {});
+        Object.keys(cursors).filter(k => k.startsWith('norms@')).forEach(k => delete cursors[k]);
+        setLocal(STORAGE_KEYS.PULL_CURSORS, cursors);
+      }
+    }
+
     const users = getLocal<User[]>(STORAGE_KEYS.USERS, []);
     const sessionUserId = getLocal<User | null>(STORAGE_KEYS.CURRENT_USER, null)?.id;
     const keptUsers = users.filter(u => u && (u.companyId === companyId || u.id === sessionUserId));
@@ -1990,7 +2005,10 @@ export class DielectricStorageService {
     }
     // Fila: descarta envios de registros de outras empresas
     const queue = this.getSyncQueue().filter(q => {
-      if (q.entityType === 'norm') return true;
+      if (q.entityType === 'norm') {
+        const norm = getLocal<NormCriterion[]>(STORAGE_KEYS.NORMS, []).find(n => n.id === q.entityId);
+        return !!norm && norm.companyId === companyId;
+      }
       if (q.entityType === 'company' || q.entityType === 'company_info') return q.entityId === companyId;
       const rec = q.entityType === 'audit'
         ? getLocal<any[]>(STORAGE_KEYS.AUDIT, []).find(l => l.id === q.entityId)
@@ -2047,7 +2065,9 @@ export class DielectricStorageService {
     add('equipment', getLocal<any[]>(STORAGE_KEYS.EQUIPMENT, []), INITIAL_EQUIPMENT);
     add('service_order', getLocal<any[]>(STORAGE_KEYS.SERVICE_ORDERS, []), INITIAL_SERVICE_ORDERS);
     add('instrument', getLocal<any[]>(STORAGE_KEYS.INSTRUMENTS, []), INITIAL_INSTRUMENTS);
-    add('norm', getLocal<any[]>(STORAGE_KEYS.NORMS, [])); // normas técnicas oficiais: sempre enviadas
+    // Normas: só as versões editadas por esta empresa (a oficial vem do banco)
+    const sessionCompanyId = this.getSessionCompanyId();
+    add('norm', getLocal<NormCriterion[]>(STORAGE_KEYS.NORMS, []).filter(n => !!sessionCompanyId && n.companyId === sessionCompanyId));
     add('test', getLocal<any[]>(STORAGE_KEYS.TESTS, []), INITIAL_TEST_RECORDS);
     add('report', getLocal<any[]>(STORAGE_KEYS.REPORTS, []));
     items.push({ entityType: 'company_info', action: 'update', entityId: this.getActiveCompany().id });
@@ -2078,10 +2098,22 @@ export class DielectricStorageService {
       if (item && item.id) indexById.set(item.id, idx);
     });
 
+    const openConflicts = this.getConflicts().filter(c => !c.resolved && c.entityType === entityType);
+    const conflictIds = new Set(openConflicts.map(c => c.entityId));
+    let conflictsChanged = false;
+
     let changed = 0;
     incomingItems.forEach(incoming => {
       if (!incoming || !incoming.id) return;
       if (pendingIds.has(incoming.id)) return;
+      if (conflictIds.has(incoming.id)) {
+        // Conflito aberto: a versão do outro aparelho é atualizada no conflito,
+        // a deste aparelho continua na tela até o usuário escolher
+        const conflict = openConflicts.find(c => c.entityId === incoming.id)!;
+        conflict.deviceB = { ...conflict.deviceB, updatedAt: incoming._serverUpdatedAt || conflict.deviceB.updatedAt, data: incoming };
+        conflictsChanged = true;
+        return;
+      }
       const idx = indexById.get(incoming.id);
       const existing = idx !== undefined ? localList[idx] : undefined;
       const merged: any = { ...(existing || {}), ...incoming, syncStatus: 'synced' };
@@ -2099,7 +2131,72 @@ export class DielectricStorageService {
     });
 
     if (changed > 0) setLocal(storageKey, localList);
+    if (conflictsChanged) {
+      const all = this.getConflicts().map(c => openConflicts.find(o => o.id === c.id) || c);
+      setLocal(STORAGE_KEYS.CONFLICTS, all);
+    }
     return changed;
+  }
+
+  /** Grava a versão do servidor dos registros enviados (sem reenfileirar). */
+  static setServerVersions(entityType: SyncEntityType, versions: Array<{ id: string; updatedAt: string }>): void {
+    const key = ENTITY_STORAGE_KEY[entityType];
+    if (!key || versions.length === 0) return;
+    const byId = new Map(versions.map(v => [v.id, v.updatedAt]));
+    const list = getLocal<any[]>(key, []);
+    let changed = false;
+    list.forEach(item => {
+      const v = item && byId.get(item.id);
+      if (v && item._serverUpdatedAt !== v) {
+        item._serverUpdatedAt = v;
+        changed = true;
+      }
+    });
+    if (changed) setLocal(key, list);
+  }
+
+  /**
+   * Registra um conflito: o registro foi alterado em outro aparelho depois da
+   * versão em que a edição deste aparelho se baseou. As duas versões ficam
+   * guardadas até o usuário escolher (tela Sincronização & Conflitos).
+   */
+  static registerConflict(entityType: SyncEntityType, remote: any, meta: { deviceId: string; updatedAt: string }): void {
+    const local = this.getLocalRecordForSync(entityType, remote.id);
+    if (!local) return;
+    const user = this.getCurrentUser();
+    const describe = (r: any) =>
+      r.testNumber || r.reportNumber || r.osNumber || r.tag || r.razaoSocial || r.nomeFantasia ||
+      r.name || r.reportCode || r.id;
+    const conflicts = this.getConflicts().filter(c => c.resolved || !(c.entityType === entityType && c.entityId === remote.id));
+    conflicts.unshift({
+      id: 'cf-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+      entityType: entityType as SyncConflict['entityType'],
+      entityId: remote.id,
+      entityName: String(describe(local)),
+      createdAt: new Date().toISOString(),
+      deviceA: {
+        deviceId: getDeviceId(),
+        deviceName: 'Este aparelho',
+        updatedAt: local.updatedAt || '',
+        userName: user?.name || '',
+        data: local
+      },
+      deviceB: {
+        deviceId: meta.deviceId,
+        deviceName: 'Outro aparelho',
+        updatedAt: meta.updatedAt,
+        userName: '',
+        data: remote
+      },
+      resolved: false
+    });
+    setLocal(STORAGE_KEYS.CONFLICTS, conflicts);
+    this.addAuditLog('SINCRONIZACAO', 'Conflito', remote.id, `Conflito de edição detectado: ${describe(local)} foi alterado em outro aparelho.`);
+    window.dispatchEvent(new Event('jvm-data-changed'));
+  }
+
+  static getOpenConflicts(): SyncConflict[] {
+    return this.getConflicts().filter(c => !c.resolved);
   }
 
   static getPendingStats(): {
@@ -2164,33 +2261,42 @@ export class DielectricStorageService {
     setLocal(STORAGE_KEYS.CONFLICTS, conflicts);
   }
 
+  /**
+   * Resolve um conflito de edição:
+   * - keep_a: mantém a versão deste aparelho e a envia (substitui a do servidor);
+   * - keep_b: adota a versão do outro aparelho (já gravada no servidor);
+   * - merge: grava `mergedData` e a envia.
+   */
   static resolveConflict(conflictId: string, choice: 'keep_a' | 'keep_b' | 'merge', mergedData?: any): void {
     const conflicts = this.getConflicts();
     const conflict = conflicts.find(c => c.id === conflictId);
-    if (!conflict) return;
+    if (!conflict || conflict.resolved) return;
+    const entityType = conflict.entityType as SyncEntityType;
+    const key = ENTITY_STORAGE_KEY[entityType];
+    if (!key) return;
+
+    // Versão atual do servidor: a gravação deste aparelho passa a partir dela
+    const serverVersion = conflict.deviceB.data?._serverUpdatedAt || conflict.deviceB.updatedAt;
+    const chosen = choice === 'keep_b'
+      ? { ...conflict.deviceB.data, syncStatus: 'synced' }
+      : { ...(choice === 'merge' ? mergedData : conflict.deviceA.data), _serverUpdatedAt: serverVersion, syncStatus: 'pending' };
+
+    const list = getLocal<any[]>(key, []);
+    const idx = list.findIndex(i => i && i.id === conflict.entityId);
+    if (idx >= 0) list[idx] = chosen;
+    else list.push(chosen);
+    setLocal(key, list);
+    if (choice !== 'keep_b') {
+      this.enqueueSync(entityType, chosen.deletedAt ? 'delete' : 'update', conflict.entityId);
+    }
 
     conflict.resolved = true;
     conflict.resolvedAt = new Date().toISOString();
     conflict.resolutionChoice = choice;
-
-    const chosenData = choice === 'keep_a' 
-      ? conflict.deviceA.data 
-      : choice === 'keep_b' 
-      ? conflict.deviceB.data 
-      : mergedData;
-
-    if (conflict.entityType === 'equipment') {
-      this.saveEquipment(chosenData);
-    } else if (conflict.entityType === 'client') {
-      this.saveClient(chosenData);
-    } else if (conflict.entityType === 'service_order') {
-      this.saveServiceOrder(chosenData);
-    } else if (conflict.entityType === 'test') {
-      this.saveTestRecord(chosenData);
-    }
-
     setLocal(STORAGE_KEYS.CONFLICTS, conflicts);
-    this.addAuditLog('SINCRONIZACAO', 'Conflito', conflictId, `Conflito de sincronização resolvido via opção: ${choice}`);
+    const label = choice === 'keep_a' ? 'versão deste aparelho' : choice === 'keep_b' ? 'versão do outro aparelho' : 'versão combinada';
+    this.addAuditLog('SINCRONIZACAO', 'Conflito', conflict.entityId, `Conflito de edição resolvido (${conflict.entityName}): mantida a ${label}.`);
+    window.dispatchEvent(new Event('jvm-data-changed'));
   }
 
   // ===========================================================================

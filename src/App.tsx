@@ -1,32 +1,10 @@
 import { ViewErrorBoundary } from './components/ViewErrorBoundary';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
 import { MobileBottomNav } from './components/MobileBottomNav';
-import { QRCodeScannerModal } from './components/QRCodeScannerModal';
-import { LaudoViewModal } from './components/LaudoViewModal';
-import { CertificadoViewModal } from './components/CertificadoViewModal';
-import { CertificateValidationView } from './components/CertificateValidationView';
 
-// Views
-import { DashboardView } from './views/DashboardView';
-import { TestWizardView } from './views/TestWizardView';
-import { TestsListView } from './views/TestsListView';
-import { EquipmentView } from './views/EquipmentView';
-import { ServiceOrdersView } from './views/ServiceOrdersView';
-import { ClientsView } from './views/ClientsView';
-import { LabInstrumentsView } from './views/LabInstrumentsView';
-import { NormsView } from './views/NormsView';
-import { SyncManagerView } from './views/SyncManagerView';
-import { AuditLogsView } from './views/AuditLogsView';
-import { BackupSettingsView } from './views/BackupSettingsView';
-import { ReportEmissionView } from './views/ReportEmissionView';
-import { AndroidFieldModeView } from './views/AndroidFieldModeView';
 import { AndroidAppShell } from './components/AndroidAppShell';
-import { AndroidInstallModal } from './components/AndroidInstallModal';
-import { MobileCameraCompanionView } from './views/MobileCameraCompanionView';
-import { MobileCameraBridgeModal } from './components/MobileCameraBridgeModal';
-import { LocalDeviceFilesManagerModal } from './components/LocalDeviceFilesManagerModal';
 
 import { User, TestRecord, Equipment } from './types';
 import { DielectricStorageService } from './services/syncEngine';
@@ -35,6 +13,35 @@ import { SupabaseService } from './services/supabaseService';
 import { LoginView } from './views/LoginView';
 import { CompanySetupView } from './views/CompanySetupView';
 import { EMPTY_USER } from './services/syncEngine';
+import { lazyView } from './utils/lazyView';
+
+// Telas carregadas sob demanda (arquivos separados)
+const DashboardView = lazyView(() => import('./views/DashboardView'), 'DashboardView');
+const TestWizardView = lazyView(() => import('./views/TestWizardView'), 'TestWizardView');
+const TestsListView = lazyView(() => import('./views/TestsListView'), 'TestsListView');
+const EquipmentView = lazyView(() => import('./views/EquipmentView'), 'EquipmentView');
+const ServiceOrdersView = lazyView(() => import('./views/ServiceOrdersView'), 'ServiceOrdersView');
+const ClientsView = lazyView(() => import('./views/ClientsView'), 'ClientsView');
+const LabInstrumentsView = lazyView(() => import('./views/LabInstrumentsView'), 'LabInstrumentsView');
+const NormsView = lazyView(() => import('./views/NormsView'), 'NormsView');
+const SyncManagerView = lazyView(() => import('./views/SyncManagerView'), 'SyncManagerView');
+const AuditLogsView = lazyView(() => import('./views/AuditLogsView'), 'AuditLogsView');
+const BackupSettingsView = lazyView(() => import('./views/BackupSettingsView'), 'BackupSettingsView');
+const ReportEmissionView = lazyView(() => import('./views/ReportEmissionView'), 'ReportEmissionView');
+const AndroidFieldModeView = lazyView(() => import('./views/AndroidFieldModeView'), 'AndroidFieldModeView');
+const MobileCameraCompanionView = lazyView(() => import('./views/MobileCameraCompanionView'), 'MobileCameraCompanionView');
+const CertificateValidationView = lazyView(() => import('./components/CertificateValidationView'), 'CertificateValidationView');
+// Modais (PDF, QR Code, câmera, instalação): carregados logo após a primeira tela
+const QRCodeScannerModal = lazyView(() => import('./components/QRCodeScannerModal'), 'QRCodeScannerModal');
+const LaudoViewModal = lazyView(() => import('./components/LaudoViewModal'), 'LaudoViewModal');
+const CertificadoViewModal = lazyView(() => import('./components/CertificadoViewModal'), 'CertificadoViewModal');
+const AndroidInstallModal = lazyView(() => import('./components/AndroidInstallModal'), 'AndroidInstallModal');
+const MobileCameraBridgeModal = lazyView(() => import('./components/MobileCameraBridgeModal'), 'MobileCameraBridgeModal');
+const LocalDeviceFilesManagerModal = lazyView(() => import('./components/LocalDeviceFilesManagerModal'), 'LocalDeviceFilesManagerModal');
+
+const viewFallback = (
+  <div className="flex items-center justify-center py-24 text-[14px] text-[#5E6A78]" role="status">Carregando…</div>
+);
 
 export default function App() {
   // Check for Mobile Camera Companion Mode (?cam=JVM-CAM-XXXX or #cam=JVM-CAM-XXXX)
@@ -49,10 +56,7 @@ export default function App() {
   const pathValidationCode = isDirectValidation ? currentPath.split('/validar/')[1]?.split('/')[0] : '';
 
   // Auth & Multi-Company Login State
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    if (isDirectValidation || initialCamSession) return true;
-    return AuthService.isAuthenticated();
-  });
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => AuthService.isAuthenticated());
 
   // App Navigation & User State
   const [activeView, setActiveView] = useState<string>(isDirectValidation ? 'validar' : 'dashboard');
@@ -82,6 +86,13 @@ export default function App() {
       return;
     }
     let cancelled = false;
+    // Com internet, exige a sessão do Supabase Auth (versões anteriores do
+    // app não tinham): sem ela o banco não entrega nem recebe dados.
+    AuthService.hasValidServerSession().then(valid => {
+      if (!cancelled && !valid) {
+        AuthService.logout('Por segurança, entre novamente com seu usuário e senha.');
+      }
+    });
     const companyId = currentUser?.companyId;
     const local = companyId ? DielectricStorageService.getCompanyById(companyId) : undefined;
     if (local && local.cnpj) {
@@ -140,7 +151,8 @@ export default function App() {
   // Update pending queue count
   const refreshSyncCount = () => {
     const stats = DielectricStorageService.getPendingStats();
-    setPendingSyncCount(stats.totalPending);
+    // conflitos de edição aguardando escolha também aparecem no contador
+    setPendingSyncCount(stats.totalPending + DielectricStorageService.getOpenConflicts().length);
   };
 
   useEffect(() => {
@@ -264,6 +276,7 @@ export default function App() {
   // If this device was opened by scanning the remote camera QR code on a mobile phone
   if (mobileCamSessionId) {
     return (
+      <Suspense fallback={viewFallback}>
       <MobileCameraCompanionView
         sessionId={mobileCamSessionId}
         onExit={() => {
@@ -272,12 +285,14 @@ export default function App() {
           setMobileCamSessionId(null);
         }}
       />
+      </Suspense>
     );
   }
 
   // If user is directly on public validation portal
   if (activeView === 'validar') {
     return (
+      <Suspense fallback={viewFallback}>
       <CertificateValidationView
         initialCode={validationCodeForPortal}
         onBackToApp={() => {
@@ -288,6 +303,7 @@ export default function App() {
           }
         }}
       />
+      </Suspense>
     );
   }
 
@@ -360,6 +376,7 @@ export default function App() {
         >
           {/* Main Content inside Android App Frame (100% of fields and views preserved) */}
           <ViewErrorBoundary resetKey={activeView} onGoHome={() => setActiveView('dashboard')}>
+          <Suspense fallback={viewFallback}>
           {(activeView === 'dashboard' || activeView === 'android_home') && (
             <AndroidFieldModeView
               key={`android_dash_${dataVersion}`}
@@ -455,51 +472,62 @@ export default function App() {
           {activeView === 'audit' && <AuditLogsView key={`android_audit_${dataVersion}`} />}
 
           {activeView === 'backup' && <BackupSettingsView key={`android_backup_${dataVersion}`} />}
+          </Suspense>
           </ViewErrorBoundary>
         </AndroidAppShell>
 
         {/* MODAL: QR Code Live Scanner & Lookup */}
-        <QRCodeScannerModal
-          isOpen={isQRScannerOpen}
-          onClose={() => setIsQRScannerOpen(false)}
-          onSelectEquipment={(eq) => {
-            setEquipmentViewSelectedEq(eq);
-            setActiveView('equipment');
-          }}
-          onSelectValidationCode={(code) => {
-            setValidationCodeForPortal(code);
-            setActiveView('validar');
-          }}
-        />
+        <Suspense fallback={null}>
+          <QRCodeScannerModal
+            isOpen={isQRScannerOpen}
+            onClose={() => setIsQRScannerOpen(false)}
+            onSelectEquipment={(eq) => {
+              setEquipmentViewSelectedEq(eq);
+              setActiveView('equipment');
+            }}
+            onSelectValidationCode={(code) => {
+              setValidationCodeForPortal(code);
+              setActiveView('validar');
+            }}
+          />
+        </Suspense>
 
         {/* MODAL: Laudo Técnico PDF Viewer */}
-        <LaudoViewModal
-          test={activeLaudoTest}
-          isOpen={!!activeLaudoTest}
-          onClose={() => setActiveLaudoTest(null)}
-          onEditTest={handleEditTest}
-        />
+        <Suspense fallback={null}>
+          <LaudoViewModal
+            test={activeLaudoTest}
+            isOpen={!!activeLaudoTest}
+            onClose={() => setActiveLaudoTest(null)}
+            onEditTest={handleEditTest}
+          />
+        </Suspense>
 
         {/* MODAL: Certificado de Conformidade PDF Viewer */}
-        <CertificadoViewModal
-          test={activeCertificadoTest}
-          isOpen={!!activeCertificadoTest}
-          onClose={() => setActiveCertificadoTest(null)}
-          onEditTest={handleEditTest}
-        />
+        <Suspense fallback={null}>
+          <CertificadoViewModal
+            test={activeCertificadoTest}
+            isOpen={!!activeCertificadoTest}
+            onClose={() => setActiveCertificadoTest(null)}
+            onEditTest={handleEditTest}
+          />
+        </Suspense>
 
         {/* MODAL: Guia de Instalação Android PWA / APK */}
-        <AndroidInstallModal
-          isOpen={isInstallModalOpen}
-          onClose={() => setIsInstallModalOpen(false)}
-          onLaunchAndroidMode={() => setIsFieldMode(true)}
-        />
+        <Suspense fallback={null}>
+          <AndroidInstallModal
+            isOpen={isInstallModalOpen}
+            onClose={() => setIsInstallModalOpen(false)}
+            onLaunchAndroidMode={() => setIsFieldMode(true)}
+          />
+        </Suspense>
 
         {/* MODAL: Gerenciador de Arquivos e Laudos Salvos no Dispositivo */}
-        <LocalDeviceFilesManagerModal
-          isOpen={isDeviceFilesModalOpen}
-          onClose={() => setIsDeviceFilesModalOpen(false)}
-        />
+        <Suspense fallback={null}>
+          <LocalDeviceFilesManagerModal
+            isOpen={isDeviceFilesModalOpen}
+            onClose={() => setIsDeviceFilesModalOpen(false)}
+          />
+        </Suspense>
       </div>
     );
   }
@@ -571,6 +599,7 @@ export default function App() {
         {/* Dynamic Content Canvas */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
           <ViewErrorBoundary resetKey={activeView} onGoHome={() => setActiveView('dashboard')}>
+          <Suspense fallback={viewFallback}>
           {activeView === 'dashboard' && (
             <DashboardView
               key={`desk_dash_${dataVersion}`}
@@ -662,6 +691,7 @@ export default function App() {
           {activeView === 'audit' && <AuditLogsView key={`desk_audit_${dataVersion}`} />}
 
           {activeView === 'backup' && <BackupSettingsView key={`desk_backup_${dataVersion}`} />}
+          </Suspense>
           </ViewErrorBoundary>
         </main>
       </div>
@@ -675,64 +705,76 @@ export default function App() {
       />
 
       {/* MODAL: QR Code Live Scanner & Lookup */}
-      <QRCodeScannerModal
-        isOpen={isQRScannerOpen}
-        onClose={() => setIsQRScannerOpen(false)}
-        onSelectEquipment={(eq) => {
-          setEquipmentViewSelectedEq(eq);
-          setActiveView('equipment');
-        }}
-        onSelectValidationCode={(code) => {
-          setValidationCodeForPortal(code);
-          setActiveView('validar');
-        }}
-      />
-
-      {/* MODAL: Laudo Técnico PDF Viewer */}
-      <LaudoViewModal
-        test={activeLaudoTest}
-        isOpen={!!activeLaudoTest}
-        onClose={() => setActiveLaudoTest(null)}
-      />
-
-      {/* MODAL: Certificado de Conformidade PDF Viewer */}
-      <CertificadoViewModal
-        test={activeCertificadoTest}
-        isOpen={!!activeCertificadoTest}
-        onClose={() => setActiveCertificadoTest(null)}
-      />
-
-      {/* MODAL: Guia de Instalação Android PWA / APK */}
-      <AndroidInstallModal
-        isOpen={isInstallModalOpen}
-        onClose={() => setIsInstallModalOpen(false)}
-        onLaunchAndroidMode={() => setIsFieldMode(true)}
-      />
-
-      {/* MODAL: Global Mobile Camera Connection Bridge */}
-      <MobileCameraBridgeModal
-        isOpen={isGlobalMobileCamOpen}
-        onClose={() => setIsGlobalMobileCamOpen(false)}
-        userName={currentUser.name}
-        onScanReceived={(code) => {
-          setIsGlobalMobileCamOpen(false);
-          const allEq = DielectricStorageService.getEquipment();
-          const match = allEq.find(e => e.serialNumber.toLowerCase() === code.toLowerCase() || e.qrCode.toLowerCase() === code.toLowerCase() || e.tag?.toLowerCase() === code.toLowerCase() || e.assetNumber?.toLowerCase() === code.toLowerCase());
-          if (match) {
-            setEquipmentViewSelectedEq(match);
+      <Suspense fallback={null}>
+        <QRCodeScannerModal
+          isOpen={isQRScannerOpen}
+          onClose={() => setIsQRScannerOpen(false)}
+          onSelectEquipment={(eq) => {
+            setEquipmentViewSelectedEq(eq);
             setActiveView('equipment');
-          } else {
+          }}
+          onSelectValidationCode={(code) => {
             setValidationCodeForPortal(code);
             setActiveView('validar');
-          }
-        }}
-      />
+          }}
+        />
+      </Suspense>
+
+      {/* MODAL: Laudo Técnico PDF Viewer */}
+      <Suspense fallback={null}>
+        <LaudoViewModal
+          test={activeLaudoTest}
+          isOpen={!!activeLaudoTest}
+          onClose={() => setActiveLaudoTest(null)}
+        />
+      </Suspense>
+
+      {/* MODAL: Certificado de Conformidade PDF Viewer */}
+      <Suspense fallback={null}>
+        <CertificadoViewModal
+          test={activeCertificadoTest}
+          isOpen={!!activeCertificadoTest}
+          onClose={() => setActiveCertificadoTest(null)}
+        />
+      </Suspense>
+
+      {/* MODAL: Guia de Instalação Android PWA / APK */}
+      <Suspense fallback={null}>
+        <AndroidInstallModal
+          isOpen={isInstallModalOpen}
+          onClose={() => setIsInstallModalOpen(false)}
+          onLaunchAndroidMode={() => setIsFieldMode(true)}
+        />
+      </Suspense>
+
+      {/* MODAL: Global Mobile Camera Connection Bridge */}
+      <Suspense fallback={null}>
+        <MobileCameraBridgeModal
+          isOpen={isGlobalMobileCamOpen}
+          onClose={() => setIsGlobalMobileCamOpen(false)}
+          userName={currentUser.name}
+          onScanReceived={(code) => {
+            setIsGlobalMobileCamOpen(false);
+            const allEq = DielectricStorageService.getEquipment();
+            const match = allEq.find(e => e.serialNumber.toLowerCase() === code.toLowerCase() || e.qrCode.toLowerCase() === code.toLowerCase() || e.tag?.toLowerCase() === code.toLowerCase() || e.assetNumber?.toLowerCase() === code.toLowerCase());
+            if (match) {
+              setEquipmentViewSelectedEq(match);
+              setActiveView('equipment');
+            } else {
+              setValidationCodeForPortal(code);
+              setActiveView('validar');
+            }
+          }}
+        />
+      </Suspense>
 
       {/* MODAL: Gerenciador de Arquivos e Laudos Salvos no Dispositivo */}
-      <LocalDeviceFilesManagerModal
-        isOpen={isDeviceFilesModalOpen}
-        onClose={() => setIsDeviceFilesModalOpen(false)}
-      />
+      <Suspense fallback={null}>
+        <LocalDeviceFilesManagerModal
+          isOpen={isDeviceFilesModalOpen}
+          onClose={() => setIsDeviceFilesModalOpen(false)}
+        />
+      </Suspense>
     </div>
   );
 }

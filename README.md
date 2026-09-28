@@ -1,13 +1,19 @@
-# JVM Dielectric Lab — Ensaios & Certificação EPI/EPC (v6.1)
+# JVM Dielectric Lab — Ensaios & Certificação EPI/EPC (v7.0)
 
 Plataforma de ensaios dielétricos, laudos e certificados de EPI/EPC com
 **Supabase como banco de dados único**.
+
+> **Atualizando da v6.x?** Siga os passos de `MUDANCAS_V7.md` (executar o novo
+> `supabase/schema.sql` e desativar o cadastro público no Supabase Auth).
 
 ## Executar localmente
 
 1. `npm install`
 2. (Opcional) configure `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` em `.env.local`
 3. `npm run dev`
+
+Verificações (as mesmas da CI): `npm run lint`, `npm test` (normas e avaliação dos
+ensaios), `npm run test:db` (regras de segurança do banco) e `npm run build`.
 
 ## Banco de dados (Supabase)
 
@@ -22,7 +28,11 @@ executado novamente sem apagar dados) e:
   (exclusão lógica) e `device_id`;
 - faz o `updated_at` ser sempre definido pelo servidor (cursor do pull);
 - habilita o Realtime nas tabelas;
-- cria o bucket público `jvm-evidencias` para as fotos dos ensaios.
+- cria o bucket público `jvm-evidencias` para as fotos dos ensaios;
+- cria as contas de login (Supabase Auth) e as regras de acesso por empresa.
+
+Depois de executar, no painel do Supabase desative o cadastro público:
+**Authentication → Sign In / Providers → "Allow new users to sign up" = OFF**.
 
 O mesmo script pode ser copiado pela tela **Supabase Cloud → Script SQL**.
 
@@ -65,18 +75,26 @@ alterações mais novas (ex.: feitas no AI Studio), ele avisa e pede confirmaç�
 3. Na primeira vez ele instala as dependências (alguns minutos) e depois abre
    `http://localhost:3000` no navegador. Para encerrar, feche a janela preta.
 
-## Login com usuário e senha do banco de dados
+## Login e segurança (Supabase Auth)
 
 O acesso ao app exige **e-mail ou nome de usuário + senha cadastrados na tabela
-`public.users` do Supabase**. As senhas ficam criptografadas (bcrypt), o app não
-consegue lê-las e a conferência é feita no servidor pela função `jvm_login`.
+`public.users`**. Cada usuário com senha ganha automaticamente uma conta de login no
+**Supabase Auth** (mesma senha, criptografada com bcrypt). A sessão aberta no login é
+o que o banco usa para decidir o que cada um pode ver e gravar:
+
+- cada usuário só lê e grava dados da **própria empresa**;
+- `is_master_admin = true` enxerga todas as empresas (use só para o administrador da plataforma);
+- perfil `cliente` só consulta; normas técnicas só são alteradas por `admin` ou `responsavel_tecnico`,
+  e a alteração vale **somente para a empresa** que a fez (as demais continuam com a versão oficial);
+- a chave pública do app, sozinha, não acessa nenhuma tabela. Sem login, só funcionam o
+  portal `/validar/CODIGO` (um certificado por código) e o envio de fotos da câmera remota.
 
 No **SQL Editor** do Supabase:
 
 ```sql
--- Criar um usuário
+-- Criar um usuário (a conta de login é criada automaticamente)
 INSERT INTO public.users (id, company_id, name, email, username, role, password_hash)
-VALUES ('usr-maria', 'comp-jvm', 'Maria Souza', 'maria@empresa.com.br', 'maria', 'tecnico', 'Senha@2026');
+VALUES ('usr-maria', '<id da empresa>', 'Maria Souza', 'maria@empresa.com.br', 'maria', 'tecnico', 'Senha@2026');
 
 -- Trocar a senha (é criptografada automaticamente ao salvar)
 UPDATE public.users SET password_hash = 'NovaSenha@2026' WHERE email = 'maria@empresa.com.br';
@@ -84,17 +102,18 @@ UPDATE public.users SET password_hash = 'NovaSenha@2026' WHERE email = 'maria@em
 -- Definir/alterar o nome de usuário
 UPDATE public.users SET username = 'maria' WHERE email = 'maria@empresa.com.br';
 
--- Bloquear / desbloquear o acesso
+-- Bloquear / desbloquear o acesso (bloquear também encerra as sessões abertas)
 UPDATE public.users SET active = false WHERE email = 'maria@empresa.com.br';
 ```
 
-Papéis (`role`): `admin`, `responsavel_tecnico`, `tecnico`, `administrativo`.
+Papéis (`role`): `admin`, `responsavel_tecnico`, `tecnico`, `administrativo`, `cliente`.
 
-- Usuários criados pela tela "Novo Usuário" do app recebem a senha inicial digitada
-  (aceita só uma vez, nos primeiros 15 minutos). Depois, a senha só muda pelo banco.
+- Senhas só são cadastradas ou trocadas pelo banco (SQL Editor). Técnicos criados pelo
+  app (ex.: "Cadastrar Analista Executor") servem para assinatura e não têm login.
+- Um técnico não consegue se promover: `role`, `active`, e-mail e nome de usuário só
+  mudam por um `admin` da empresa; `is_master_admin` só por outro master.
 - Sem internet, entra apenas quem já fez login com internet naquele aparelho nos
-  últimos 30 dias.
-- Após a atualização, todos precisam entrar de novo uma vez (não há mais login automático).
+  últimos 30 dias. Ao voltar a internet sem sessão válida, a sincronização pede novo login.
 
 ## Versão sem dados (instalação limpa)
 
@@ -132,7 +151,7 @@ localmente na primeira abertura desta versão e passam a mostrar apenas o que es
 - Ao entrar, dados de outras empresas que estivessem no aparelho são removidos.
 - O banco **recusa** as empresas/usuários de demonstração (`comp-jvm`, `comp-voltsafe`,
   `comp-altatensao`, `usr-1`…), que só versões antigas do app ainda enviam.
-- A tela de login mostra **"Versão 6.3"** no rodapé: use para conferir se o site publicado
+- A tela de login mostra a versão no rodapé (ex.: **"Versão 7.0.0"**): use para conferir se o site publicado
   está atualizado.
 
 Descobrir quem está gravando no banco (aparelho e horário):

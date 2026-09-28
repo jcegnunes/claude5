@@ -1,4 +1,4 @@
-import { createClient, SupabaseClient, RealtimeChannel } from '@supabase/supabase-js';
+import { createClient, SupabaseClient, RealtimeChannel, Session } from '@supabase/supabase-js';
 import {
   Client,
   Equipment,
@@ -100,6 +100,8 @@ export interface SupabaseFlushResult {
   details: { tests: number; equipment: number; serviceOrders: number; clients: number; photos: number };
   perEntity: Partial<Record<SyncEntityType, number>>;
   errors: string[];
+  /** Registros recusados por terem sido alterados em outro aparelho. */
+  conflicts?: number;
 }
 
 export interface SupabaseSyncNowResult {
@@ -116,6 +118,9 @@ export const DEFAULT_SUPABASE_CONFIG: SupabaseConfig = {
   enabled: true,
   autoSync: true
 };
+
+/** Mensagem exibida quando o aparelho está sem sessão válida no Supabase Auth. */
+export const SESSION_EXPIRED_MESSAGE = 'Sessão expirada: saia e entre novamente com usuário e senha para sincronizar os dados.';
 
 /** Bucket público de fotos/evidências (criado pelo supabase/schema.sql). */
 export const EVIDENCE_BUCKET = 'jvm-evidencias';
@@ -162,6 +167,13 @@ const ENTITY_TABLE: Record<SyncEntityType, SyncTable> = {
   report: 'consolidated_reports',
   audit: 'audit_logs'
 };
+
+/** Tabelas com detecção de conflito de edição entre aparelhos (coluna base_updated_at). */
+const CONFLICT_TABLES = new Set<SyncTable>(['clients', 'equipment', 'service_orders', 'test_records', 'lab_instruments', 'consolidated_reports']);
+
+function isEditConflict(error: string): boolean {
+  return /JV409|Conflito de edição/i.test(error || '');
+}
 
 /** Tamanho dos lotes de envio (ensaios carregam assinaturas/fotos). */
 const CHUNK_SIZE: Partial<Record<SyncTable, number>> = { test_records: 10 };
@@ -223,6 +235,7 @@ export class SupabaseService {
   private static pullTimer: ReturnType<typeof setTimeout> | null = null;
   private static lastAutoSyncAt = 0;
   private static usersLegacySelect = false;
+  private static refillPromise: Promise<void> | null = null;
 
   // ===========================================================================
   // CONFIGURAÇÃO E CLIENTE
@@ -263,9 +276,12 @@ export class SupabaseService {
     }
 
     this.cachedClient = createClient(normalizedUrl, key, {
+      // Sessão do Supabase Auth guardada no aparelho: é ela que identifica o
+      // usuário e a empresa nas regras de acesso (RLS) do banco.
       auth: {
-        persistSession: false,
-        autoRefreshToken: false
+        persistSession: true,
+        autoRefreshToken: true,
+        storageKey: 'jvm-supabase-auth'
       },
       db: {
         schema: 'public'
@@ -281,6 +297,25 @@ export class SupabaseService {
     }
 
     return this.cachedClient;
+  }
+
+  /** Sessão de login do Supabase guardada neste aparelho (null se não houver). */
+  static async getSession(): Promise<Session | null> {
+    try {
+      const { data } = await this.getClient().auth.getSession();
+      return data.session;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Encerra a sessão do Supabase neste aparelho (funciona também offline). */
+  static async signOut(): Promise<void> {
+    try {
+      await this.getClient().auth.signOut({ scope: 'local' });
+    } catch (err) {
+      console.warn('Falha ao encerrar a sessão do Supabase:', err);
+    }
   }
 
   private static canSync(): boolean {
@@ -414,6 +449,12 @@ export class SupabaseService {
       return result;
     }
 
+    if (!(await this.getSession())) {
+      result.remaining = DielectricStorageService.getSyncQueue().length;
+      result.errors.push(SESSION_EXPIRED_MESSAGE);
+      return result;
+    }
+
     const client = this.getClient();
     const deviceId = getDeviceId();
     const groups = new Map<SyncEntityType, SyncQueueItem[]>();
@@ -452,12 +493,29 @@ export class SupabaseService {
       await this.ensureCompanies(client, prepared.map(p => p.row.company_id).filter(Boolean));
 
       // 3. Envia em lotes, isolando registros com problema
-      const { ok, failed } = await this.upsertRows(client, table, prepared, entityType === 'audit');
+      const upserted = await this.upsertRows(client, table, prepared, entityType === 'audit');
+      const ok = upserted.ok;
+      let failed = upserted.failed;
+      if (entityType === 'norm') {
+        // Normas são referência comum: só admin/RT alteram. Recusa de permissão
+        // não se resolve com nova tentativa — prevalece a versão do servidor.
+        const denied = failed.filter(f => /row-level security|42501/i.test(f.error));
+        DielectricStorageService.completeSyncItems(denied.map(f => f.item));
+        failed = failed.filter(f => !denied.includes(f));
+      }
+      // Conflito de edição: guarda as duas versões para o usuário escolher
+      const conflicts = failed.filter(f => isEditConflict(f.error));
+      if (conflicts.length > 0) {
+        await this.registerConflicts(client, table, entityType, conflicts.map(c => c.item));
+        DielectricStorageService.completeSyncItems(conflicts.map(c => c.item));
+        failed = failed.filter(f => !conflicts.includes(f));
+        result.conflicts = (result.conflicts || 0) + conflicts.length;
+        result.errors.push(`${conflicts.length} conflito(s) de edição: escolha a versão em Sincronização & Conflitos.`);
+      }
       DielectricStorageService.completeSyncItems(ok.map(o => o.item));
       DielectricStorageService.failSyncItems(failed.map(f => ({ item: f.item, error: f.error })));
-
-      if (entityType === 'user' && ok.length > 0) {
-        await this.sendInitialPasswords(client, ok.map(o => o.item.entityId));
+      if (CONFLICT_TABLES.has(table) && ok.length > 0) {
+        await this.refreshServerVersions(client, table, entityType, ok.map(o => o.item.entityId));
       }
 
       result.pushed += ok.length;
@@ -485,6 +543,47 @@ export class SupabaseService {
   }
 
   private static buildRow(entityType: SyncEntityType, record: any, deviceId: string): Record<string, any> {
+    const row = this.mapRow(entityType, record, deviceId);
+    if (CONFLICT_TABLES.has(ENTITY_TABLE[entityType])) {
+      // Versão do servidor em que a edição se baseou (null = registro novo/antigo)
+      row.base_updated_at = record._serverUpdatedAt || null;
+    }
+    return row;
+  }
+
+  /**
+   * Após o envio, guarda a versão (updated_at) que ficou no servidor: a próxima
+   * edição deste aparelho parte dela e não é confundida com conflito.
+   */
+  private static async refreshServerVersions(client: SupabaseClient, table: SyncTable, entityType: SyncEntityType, ids: string[]): Promise<void> {
+    for (let i = 0; i < ids.length; i += 100) {
+      const { data, error } = await client.from(table).select('id,updated_at').in('id', ids.slice(i, i + 100));
+      if (error || !data) return;
+      DielectricStorageService.setServerVersions(entityType, data.map((r: any) => ({ id: r.id, updatedAt: r.updated_at })));
+    }
+  }
+
+  /** Busca a versão do servidor e registra o conflito com a versão deste aparelho. */
+  private static async registerConflicts(client: SupabaseClient, table: SyncTable, entityType: SyncEntityType, items: SyncQueueItem[]): Promise<void> {
+    const ids = items.map(i => i.entityId);
+    const { data, error } = await client.from(table).select('*').in('id', ids);
+    if (error || !data) return;
+    const toLocal: Partial<Record<SyncTable, (row: any) => any>> = {
+      clients: rowToClient,
+      equipment: rowToEquipment,
+      service_orders: rowToServiceOrder,
+      test_records: rowToTest,
+      lab_instruments: rowToInstrument,
+      consolidated_reports: rowToReport
+    };
+    const map = toLocal[table];
+    if (!map) return;
+    data.forEach((row: any) => {
+      DielectricStorageService.registerConflict(entityType, map(row), { deviceId: row.device_id || '', updatedAt: row.updated_at });
+    });
+  }
+
+  private static mapRow(entityType: SyncEntityType, record: any, deviceId: string): Record<string, any> {
     switch (entityType) {
       case 'company':
         return companyToRow(record as Company, deviceId);
@@ -586,6 +685,7 @@ export class SupabaseService {
       delete legacy.deleted_at;
       delete legacy.lab_info;
       delete legacy.username;
+      delete legacy.base_updated_at;
       const res = await client.from(table).upsert([legacy], { onConflict: 'id', ignoreDuplicates });
       if (!res.error) return null;
       error = res.error;
@@ -605,23 +705,6 @@ export class SupabaseService {
     }
 
     return `${error?.code ? `[${error.code}] ` : ''}${error?.message || 'Erro desconhecido'}`;
-  }
-
-  /**
-   * Envia a senha inicial de usuários recém-criados pelo app. O banco só
-   * aceita se o usuário ainda não tiver senha (ver jvm_set_initial_password).
-   */
-  private static async sendInitialPasswords(client: SupabaseClient, userIds: string[]): Promise<void> {
-    const pending = DielectricStorageService.getPendingInitialPasswords();
-    for (const id of userIds) {
-      const pwd = pending[id];
-      if (!pwd) continue;
-      const { error } = await client.rpc('jvm_set_initial_password', { p_user_id: id, p_password: pwd });
-      // Sucesso, recusa definitiva ou banco sem a função: a senha sai do aparelho
-      if (!error || !/fetch|network/i.test(error.message || '')) {
-        DielectricStorageService.clearPendingInitialPassword(id);
-      }
-    }
   }
 
   /** Cria (somente se ausentes) as empresas referenciadas pelos registros. */
@@ -710,7 +793,8 @@ export class SupabaseService {
     try {
       const client = this.getClient();
       const path = `${folder.replace(/[^a-zA-Z0-9_\/-]/g, '_')}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${parsed.ext}`;
-      const { error } = await client.storage.from(EVIDENCE_BUCKET).upload(path, parsed.blob, { contentType: parsed.mime, upsert: true });
+      // Sem upsert: a câmera remota (celular sem login) só tem permissão para inserir
+      const { error } = await client.storage.from(EVIDENCE_BUCKET).upload(path, parsed.blob, { contentType: parsed.mime, upsert: false });
       if (error) return null;
       return client.storage.from(EVIDENCE_BUCKET).getPublicUrl(path).data.publicUrl;
     } catch {
@@ -750,6 +834,12 @@ export class SupabaseService {
       return res;
     }
 
+    if (!(await this.getSession())) {
+      res.success = false;
+      res.errors.push(SESSION_EXPIRED_MESSAGE);
+      return res;
+    }
+
     const client = this.getClient();
     // Isolamento: só baixa dados da empresa do usuário logado (normas são globais)
     const scope = DielectricStorageService.getSessionCompanyId();
@@ -772,7 +862,8 @@ export class SupabaseService {
             .range(from, from + pageSize - 1);
           if (since) query = query.gte('updated_at', since);
           if (table === 'companies') query = query.eq('id', scope);
-          else if (table !== 'norms') query = query.eq('company_id', scope);
+          else if (table === 'norms') query = scope ? query.or(`company_id.is.null,company_id.eq.${scope}`) : query.is('company_id', null);
+          else query = query.eq('company_id', scope);
 
           const { data, error } = await query;
           if (error) {
@@ -825,10 +916,12 @@ export class SupabaseService {
   private static applyRemoteRows(table: SyncTable, rows: any[], keepNewerLocal: boolean): number {
     const entityType = TABLE_ENTITY[table];
     const scope = DielectricStorageService.getSessionCompanyId();
-    if (table !== 'norms') {
+    if (table === 'norms') {
+      rows = rows.filter((r: any) => !r.company_id || r.company_id === scope);
+    } else {
       rows = rows.filter((r: any) => (table === 'companies' ? r.id : r.company_id) === scope);
-      if (rows.length === 0) return 0;
     }
+    if (rows.length === 0) return 0;
     let mapped: any[] = [];
     switch (table) {
       case 'companies': mapped = rows.map(rowToCompany); break;
@@ -841,6 +934,18 @@ export class SupabaseService {
       case 'test_records': mapped = rows.map(rowToTest); break;
       case 'consolidated_reports': mapped = rows.map(rowToReport); break;
       default: return 0;
+    }
+
+    if (table === 'norms') {
+      // Versão da empresa prevalece sobre a oficial (mesma norma no mesmo lote
+      // ou versão da empresa já guardada no aparelho)
+      const companyIds = new Set(mapped.filter(m => m.companyId).map(m => m.id));
+      mapped = mapped.filter(m => {
+        if (m.companyId) return true;
+        if (companyIds.has(m.id)) return false;
+        const local = DielectricStorageService.getLocalRecordForSync('norm', m.id) as NormCriterion | null;
+        return !(local && local.companyId === scope);
+      });
     }
 
     if (keepNewerLocal) {
@@ -959,7 +1064,42 @@ export class SupabaseService {
       out.pulled += pull.totalPulled;
       out.errors.push(...pull.errors);
     }
+
+    // Depois de enviar e baixar (números já usados conhecidos), repõe as faixas de numeração
+    await this.refillNumberBlocks();
     return out;
+  }
+
+  /**
+   * Reserva no servidor novas faixas de numeração (ensaio, laudo, certificado,
+   * OS) para uso offline sem duplicidade entre aparelhos.
+   */
+  static async refillNumberBlocks(): Promise<void> {
+    if (this.refillPromise) return this.refillPromise;
+    this.refillPromise = (async () => {
+      if (!this.canSync() || !DielectricStorageService.getSessionCompanyId()) return;
+      if (!(await this.getSession())) return;
+      const client = this.getClient();
+      for (const req of DielectricStorageService.getNumberRefillRequests()) {
+        const { data, error } = await client.rpc('jvm_reserve_numbers', {
+          p_kind: req.kind,
+          p_period: req.period,
+          p_quantity: req.quantity,
+          p_local_max: req.localMax
+        });
+        if (error) {
+          // Sem permissão (perfil cliente) ou banco sem a função: usa a contingência
+          console.info('[Numeração] Reserva indisponível:', error.message);
+          return;
+        }
+        const range: any = typeof data === 'string' ? JSON.parse(data) : data;
+        if (range && Number.isFinite(range.start) && Number.isFinite(range.end)) {
+          DielectricStorageService.addNumberRange(req.kind, range.start, range.end);
+        }
+      }
+    })().catch(err => console.warn('[Numeração] Falha ao reservar faixa:', err))
+      .finally(() => { this.refillPromise = null; });
+    return this.refillPromise;
   }
 
   /**
@@ -980,6 +1120,8 @@ export class SupabaseService {
     };
 
     window.addEventListener('online', () => run('online'));
+    // Faixa de numeração acabando: reserva outra se houver internet
+    window.addEventListener('jvm-number-refill', () => { this.refillNumberBlocks(); });
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') run('visibility');
     });
@@ -1106,24 +1248,32 @@ export class SupabaseService {
   // VALIDAÇÃO PÚBLICA (QR CODE)
   // ===========================================================================
   /**
-   * Busca um laudo/certificado diretamente no Supabase pelo código de
-   * validação, número do certificado, do laudo ou do ensaio. Usado pelo
-   * portal público quando o registro não está no aparelho de quem consulta.
+   * Portal público: busca um laudo/certificado no Supabase pelo código de
+   * validação (o código aleatório do QR Code). Funciona sem login, pela
+   * função jvm_validar_certificado. Devolve também os dados do laboratório
+   * emissor, usados no PDF baixado pelo cliente.
    */
-  static async fetchTestByCode(code: string): Promise<TestRecord | null> {
-    const clean = (code || '').trim().replace(/["\\,()]/g, '');
+  static async fetchPublicValidation(code: string): Promise<{ test: TestRecord; labInfo?: CompanyLabInfo } | null> {
+    const clean = (code || '').trim().toUpperCase();
     if (!clean) return null;
     try {
       const client = this.getClient();
-      const orFilter = ['validation_code', 'certificate_number', 'report_number', 'test_number']
-        .map(col => `${col}.eq."${clean}"`)
-        .join(',');
-      let { data, error } = await client.from('test_records').select('*').or(orFilter).is('deleted_at', null).limit(1);
-      if (error && isMissingColumnError(error)) {
-        ({ data, error } = await client.from('test_records').select('*').or(orFilter).limit(1));
-      }
-      if (error || !data || data.length === 0) return null;
-      return rowToTest(data[0]);
+      const { data, error } = await client.rpc('jvm_validar_certificado', { p_code: clean });
+      if (error || !data) return null;
+      const payload: any = typeof data === 'string' ? JSON.parse(data) : data;
+      if (!payload?.test) return null;
+      const test = rowToTest(payload.test);
+      const company = payload.company;
+      const labInfo: CompanyLabInfo | undefined = company
+        ? {
+            ...DielectricStorageService.getCompanyInfo(),
+            name: company.name || '',
+            legalName: company.legal_name || company.name || '',
+            cnpj: company.cnpj || '',
+            ...(company.lab_info && typeof company.lab_info === 'object' ? company.lab_info : {})
+          }
+        : undefined;
+      return { test, labInfo };
     } catch {
       return null;
     }
@@ -1133,14 +1283,18 @@ export class SupabaseService {
   // AUTENTICAÇÃO
   // ===========================================================================
   /**
-   * Autentica credenciais na tabela public.users do Supabase.
-   * (Removidas as senhas universais que davam acesso a QUALQUER conta.)
+   * Login pelo Supabase Auth (e-mail ou nome de usuário + senha).
+   * A sessão fica guardada no aparelho e identifica o usuário nas regras de
+   * acesso do banco: cada um só lê e grava os dados da própria empresa.
    */
   static async authenticateWithSupabase(
     login: string,
     password: string,
     companyId?: string
   ): Promise<{ success: boolean; user?: User; error?: string; networkError?: boolean }> {
+    const isNetwork = (msg?: string) => /fetch|network|Failed to|timed? ?out|Load failed/i.test(msg || '');
+    const isMissingFn = (err: any) =>
+      err?.code === 'PGRST202' || err?.code === '42883' || /Could not find the function|does not exist/i.test(err?.message || '');
     try {
       const config = this.getConfig();
       if (!config.enabled) {
@@ -1150,26 +1304,45 @@ export class SupabaseService {
       const client = this.getClient(config);
       const cleanLogin = login.trim().toLowerCase();
 
-      // Conferência da senha no servidor (senha criptografada, nunca exposta)
-      const { data, error } = await client.rpc('jvm_login', { p_login: cleanLogin, p_password: password });
-
-      if (error) {
-        if (/fetch|network|Failed to/i.test(error.message || '')) {
+      // 1. Nome de usuário -> e-mail de login
+      const { data: email, error: emailError } = await client.rpc('jvm_login_email', { p_login: cleanLogin });
+      if (emailError) {
+        if (isNetwork(emailError.message)) {
           return { success: false, networkError: true, error: 'Sem conexão com o banco de dados.' };
         }
-        const missingFn = error.code === 'PGRST202' || error.code === '42883' || /Could not find the function|does not exist/i.test(error.message || '');
-        if (missingFn) {
+        if (isMissingFn(emailError)) {
           return {
             success: false,
-            error: 'O login pelo banco de dados ainda não foi ativado. Execute o arquivo supabase/schema.sql no SQL Editor do Supabase.'
+            error: 'O login desta versão ainda não foi ativado no banco. Execute o arquivo supabase/schema.sql no SQL Editor do Supabase.'
           };
         }
-        return { success: false, error: `Erro no Supabase: ${error.message}` };
+        return { success: false, error: `Erro no Supabase: ${emailError.message}` };
+      }
+      if (!email) {
+        return { success: false, error: 'Usuário ou senha inválidos.' };
       }
 
+      // 2. Senha conferida pelo Supabase Auth
+      const { error: signInError } = await client.auth.signInWithPassword({ email: String(email), password });
+      if (signInError) {
+        if (isNetwork(signInError.message) || signInError.status === 0) {
+          return { success: false, networkError: true, error: 'Sem conexão com o banco de dados.' };
+        }
+        if (signInError.code === 'user_banned' || /banned/i.test(signInError.message || '')) {
+          return { success: false, error: 'Usuário inativo. Contate o administrador.' };
+        }
+        if (signInError.status === 429) {
+          return { success: false, error: 'Muitas tentativas de login. Aguarde alguns minutos e tente novamente.' };
+        }
+        return { success: false, error: 'Usuário ou senha inválidos.' };
+      }
+
+      // 3. Perfil do usuário no sistema
+      const { data, error } = await client.rpc('jvm_me');
       const payload: any = typeof data === 'string' ? JSON.parse(data) : data;
-      if (!payload || payload.ok !== true || !payload.user) {
-        return { success: false, error: payload?.error || 'Usuário ou senha inválidos.' };
+      if (error || !payload || payload.ok !== true || !payload.user) {
+        await this.signOut();
+        return { success: false, error: payload?.error || error?.message || 'Não foi possível carregar o perfil do usuário.' };
       }
 
       const userObj = rowToUser(payload.user);

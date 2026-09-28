@@ -1,4 +1,3 @@
-import * as XLSX from 'xlsx';
 import { TestRecord, Client, CompanyLabInfo } from '../types';
 import { DielectricStorageService } from './syncEngine';
 import { formatDateBR, getTodayBR } from '../utils/dateUtils';
@@ -468,6 +467,9 @@ export async function exportTestsSpreadsheet(
   ]);
 
   // Criar o Workbook e Worksheet no SheetJS
+  // Biblioteca de planilhas carregada só quando o usuário exporta (usada apenas
+  // para GERAR arquivos: o app nunca lê planilhas de terceiros)
+  const XLSX = await import('xlsx');
   const ws = XLSX.utils.aoa_to_sheet(aoa);
 
   // Configuração de Largura das Colunas para visualização perfeita

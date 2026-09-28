@@ -32,6 +32,7 @@ import { ValidationPortalService, DEFAULT_VALIDATION_BASE_URL, PortalConnectionR
 import { SupabaseService, SupabaseConnectionResult } from '../services/supabaseService';
 import { SupabaseDatabaseModal } from '../components/SupabaseDatabaseModal';
 import { CompleteBackupModal } from '../components/CompleteBackupModal';
+import { ConflictsPanel } from '../components/ConflictsPanel';
 import { FolderArchive } from 'lucide-react';
 
 interface SyncManagerViewProps {
@@ -510,6 +511,9 @@ export const SyncManagerView: React.FC<SyncManagerViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Conflitos de edição entre aparelhos (aparece só quando houver) */}
+      <ConflictsPanel />
 
       {/* Synchronized Records Overview Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">

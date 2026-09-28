@@ -8,6 +8,13 @@ import { DielectricClass, EquipmentType } from '../types';
  * Tapetes Isolantes de Borracha para Áreas de Painéis e Subestações
  */
 
+/**
+ * Limite de corrente de fuga dos TAPETES isolantes (ASTM D178-22): a norma não
+ * fixa valor; o laboratório adota 100 mA para todas as classes. Este valor é
+ * aplicado na avaliação e não pode ser alterado pela tela de Normas.
+ */
+export const TAPETE_LEAKAGE_LIMIT_MA = 100;
+
 export type BlanketType = 'Type I' | 'Type II';
 export type BlanketStyle = 'Style A' | 'Style B' | 'Style C' | 'Style D';
 export type MattingSurface = 'Corrugada' | 'Xadrez' | 'Lisa';

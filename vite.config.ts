@@ -1,11 +1,18 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
+import {readFileSync} from 'fs';
 import path from 'path';
 import {defineConfig} from 'vite';
 import {VitePWA} from 'vite-plugin-pwa';
 
+// Versão única do sistema (tela de login etc.): vem do package.json
+const APP_VERSION: string = JSON.parse(readFileSync(path.resolve(__dirname, 'package.json'), 'utf8')).version;
+
 export default defineConfig(() => {
   return {
+    define: {
+      __APP_VERSION__: JSON.stringify(APP_VERSION),
+    },
     plugins: [
       react(),
       tailwindcss(),
@@ -89,7 +96,7 @@ export default defineConfig(() => {
       rollupOptions: {
         output: {
           manualChunks: {
-            vendor: ['react', 'react-dom', 'recharts', 'lucide-react', 'html2canvas', 'jspdf', 'motion'],
+            vendor: ['react', 'react-dom', 'lucide-react', '@supabase/supabase-js'],
           },
         },
       },

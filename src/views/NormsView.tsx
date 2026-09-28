@@ -31,7 +31,8 @@ import {
   BLANKET_STYLES_INFO, 
   BLANKET_TYPES_INFO, 
   BLANKET_SIZES_INFO,
-  MATTING_SURFACES_INFO 
+  MATTING_SURFACES_INFO,
+  TAPETE_LEAKAGE_LIMIT_MA
 } from '../services/astmBlanketMattingService';
 import { 
   IEC_61243_1_TABLE,
@@ -150,8 +151,8 @@ export const NormsView: React.FC = () => {
       testVoltage_kV: Number(testVoltage_kV),
       voltageType,
       testDurationSeconds: Number(testDurationSeconds),
-      maxLeakageCurrent: Number(maxLeakageCurrent),
-      currentUnit,
+      maxLeakageCurrent: equipmentType === 'tapete_isolante' ? TAPETE_LEAKAGE_LIMIT_MA : Number(maxLeakageCurrent),
+      currentUnit: equipmentType === 'tapete_isolante' ? 'mA' : currentUnit,
       defaultRetestMonths: Number(retestIntervalMonths),
       approvalCriterion: 'visual_and_leakage',
       notes: description.trim(),
@@ -1823,6 +1824,11 @@ export const NormsView: React.FC = () => {
                       </span>
                     </div>
 
+                    {norm.companyId && (
+                      <span className="inline-block mt-2 text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded bg-violet-50 text-violet-800 border border-violet-200" title="Parâmetros alterados pela sua empresa. As demais empresas continuam com a versão oficial.">
+                        Versão da empresa
+                      </span>
+                    )}
                     <h3 className="font-bold text-slate-900 text-sm mt-3">{norm.normName}</h3>
                     <p className={`text-xs font-bold uppercase mt-0.5 ${
                       isManta ? 'text-amber-700' : isTapete ? 'text-emerald-700' : 'text-slate-500'
@@ -1947,6 +1953,9 @@ export const NormsView: React.FC = () => {
             </div>
 
             <form onSubmit={handleSaveNorm} className="p-6 overflow-y-auto space-y-4 text-xs">
+              <p className="rounded-md border border-violet-200 bg-violet-50 px-3 py-2 text-violet-900">
+                As alterações valem <strong>somente para a sua empresa</strong>. As demais empresas continuam usando a versão oficial da norma.
+              </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Tipo de EPI / EPC *</label>
@@ -2071,19 +2080,26 @@ export const NormsView: React.FC = () => {
                       type="number"
                       step="0.1"
                       required
-                      value={maxLeakageCurrent}
+                      value={equipmentType === 'tapete_isolante' ? TAPETE_LEAKAGE_LIMIT_MA : maxLeakageCurrent}
                       onChange={(e) => setMaxLeakageCurrent(Number(e.target.value))}
-                      className="flex-1 p-2 border border-slate-300 rounded-xl font-bold text-blue-700"
+                      readOnly={equipmentType === 'tapete_isolante'}
+                      className={`flex-1 p-2 border border-slate-300 rounded-xl font-bold text-blue-700 ${equipmentType === 'tapete_isolante' ? 'bg-slate-100 cursor-not-allowed' : ''}`}
                     />
                     <select
-                      value={currentUnit}
+                      value={equipmentType === 'tapete_isolante' ? 'mA' : currentUnit}
                       onChange={(e) => setCurrentUnit(e.target.value as any)}
+                      disabled={equipmentType === 'tapete_isolante'}
                       className="w-20 p-2 border border-slate-300 rounded-xl"
                     >
                       <option value="mA">mA</option>
                       <option value="uA">uA</option>
                     </select>
                   </div>
+                  {equipmentType === 'tapete_isolante' && (
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      Tapetes isolantes: limite fixo de {TAPETE_LEAKAGE_LIMIT_MA} mA para todas as classes (a ASTM D178-22 não estipula valor).
+                    </p>
+                  )}
                 </div>
 
                 <div>

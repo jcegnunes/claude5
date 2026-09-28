@@ -17,6 +17,7 @@ const OFFLINE_CREDENTIALS_KEY = 'jvm_offline_credentials';
 const OFFLINE_VALIDITY_DAYS = 30;
 const PBKDF2_ITERATIONS = 150000;
 const DB_SESSION_PREFIX = 'jvm_db_session_';
+const LOGOUT_REASON_KEY = 'jvm_logout_reason';
 
 function toBase64(bytes: ArrayBuffer | Uint8Array): string {
   const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
@@ -56,7 +57,8 @@ export class AuthService {
 
   /**
    * Login com e-mail OU nome de usuário + senha cadastrados no banco de dados.
-   * - Online: a senha é conferida no servidor (função jvm_login).
+   * - Online: a senha é conferida pelo Supabase Auth, que abre a sessão
+   *   usada pelas regras de acesso do banco (cada empresa vê só os seus dados).
    * - Sem internet: aceita apenas quem já entrou online neste aparelho nos
    *   últimos 30 dias (prova de senha PBKDF2 guardada localmente).
    */
@@ -75,6 +77,7 @@ export class AuthService {
     if (online) {
       const res = await SupabaseService.authenticateWithSupabase(cleanLogin, password, companyId);
       if (res.success && res.user) {
+        DielectricStorageService.clearLegacyPendingPasswords();
         const user = this.applyCompany(res.user, companyId);
         await this.saveOfflineCredential(user, cleanLogin, password);
         this.setCurrentUser(user, rememberMe, true);
@@ -238,8 +241,14 @@ export class AuthService {
     }
   }
 
-  static logout(): void {
+  /**
+   * Encerra a sessão local e a sessão do Supabase neste aparelho.
+   * `reason` aparece na tela de login (ex.: sessão expirada).
+   */
+  static logout(reason?: string): void {
+    SupabaseService.signOut();
     try {
+      if (reason) sessionStorage.setItem(LOGOUT_REASON_KEY, reason);
       localStorage.removeItem(this.CURRENT_USER_KEY);
       localStorage.removeItem(this.AUTH_TOKEN_KEY);
       sessionStorage.removeItem(this.AUTH_TOKEN_KEY);
@@ -254,6 +263,27 @@ export class AuthService {
    * Autenticado somente se a sessão foi aberta com usuário e senha conferidos
    * pelo banco. Sessões antigas (login automático/sem senha) pedem novo login.
    */
+  /** Motivo do último logout automático (lido uma única vez pela tela de login). */
+  static consumeLogoutReason(): string | null {
+    try {
+      const reason = sessionStorage.getItem(LOGOUT_REASON_KEY);
+      sessionStorage.removeItem(LOGOUT_REASON_KEY);
+      return reason;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Com internet, a sessão local só vale se houver sessão do Supabase Auth
+   * (versões anteriores ou login feito offline não têm). Sem internet, o
+   * acesso offline continua liberado.
+   */
+  static async hasValidServerSession(): Promise<boolean> {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return true;
+    return !!(await SupabaseService.getSession());
+  }
+
   static isAuthenticated(): boolean {
     const token = this.getSessionToken();
     return this.getCurrentUser() !== null && !!token && token.startsWith(DB_SESSION_PREFIX);

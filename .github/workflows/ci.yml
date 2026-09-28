@@ -20,11 +20,22 @@ jobs:
         node-version: 20
         cache: 'npm'
 
+    # npm ci falha se o package-lock.json estiver desatualizado
     - name: Install dependencies
-      run: npm install
+      run: npm ci
 
-    - name: Type check and Lint
+    - name: Type check
       run: npm run lint
+
+    - name: Unit tests (normas / avaliação dos ensaios)
+      run: npm test
+
+    - name: Database security tests (RLS / login)
+      run: npm run test:db
+
+    # recriar_banco.sql deve conter o mesmo schema.sql
+    - name: recriar_banco.sql em dia com schema.sql
+      run: npm run build:sql && git diff --exit-code supabase/recriar_banco.sql
 
     - name: Build production bundle
       run: npm run build

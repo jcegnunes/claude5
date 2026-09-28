@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { DielectricStorageService } from '../services/syncEngine';
 import { SupabaseService } from '../services/supabaseService';
-import { TestRecord } from '../types';
+import { CompanyLabInfo, TestRecord } from '../types';
 import { exportCertificadoPDF, exportLaudoPDF } from '../services/pdfGenerator';
 import { formatDateBR } from '../utils/dateUtils';
 
@@ -35,7 +35,9 @@ export const CertificateValidationView: React.FC<CertificateValidationViewProps>
   const [hasSearched, setHasSearched] = useState(false);
   const [isExportingCert, setIsExportingCert] = useState(false);
   const [isExportingLaudo, setIsExportingLaudo] = useState(false);
-  const company = DielectricStorageService.getCompanyInfo();
+  // Laboratório emissor: vem junto com o certificado consultado no banco
+  const [remoteLabInfo, setRemoteLabInfo] = useState<CompanyLabInfo | null>(null);
+  const company = remoteLabInfo || DielectricStorageService.getCompanyInfo();
 
   const handleSearch = async (codeToSearch: string) => {
     const clean = codeToSearch.trim().toUpperCase();
@@ -44,6 +46,7 @@ export const CertificateValidationView: React.FC<CertificateValidationViewProps>
     // 1. Cache do aparelho (consulta instantânea, funciona offline)
     const localTest = DielectricStorageService.getTestById(clean);
     if (localTest) {
+      setRemoteLabInfo(null);
       setTestRecord(localTest);
       setHasSearched(true);
       return;
@@ -51,8 +54,9 @@ export const CertificateValidationView: React.FC<CertificateValidationViewProps>
 
     // 2. Banco de dados Supabase — quem lê o QR Code em outro celular não
     //    possui os dados localmente (antes o resultado era sempre "não encontrado")
-    const remoteTest = navigator.onLine ? await SupabaseService.fetchTestByCode(clean) : null;
-    setTestRecord(remoteTest);
+    const remote = navigator.onLine ? await SupabaseService.fetchPublicValidation(clean) : null;
+    setRemoteLabInfo(remote?.labInfo || null);
+    setTestRecord(remote?.test || null);
     setHasSearched(true);
   };
 
@@ -131,7 +135,7 @@ export const CertificateValidationView: React.FC<CertificateValidationViewProps>
             Consulta Pública de Laudo / Certificado
           </h2>
           <p className="text-xs text-slate-500 mb-4">
-            Digite o código de validação, número do laudo ou número do certificado impresso no documento:
+            Digite o código de validação impresso no documento (junto ao QR Code):
           </p>
 
           <form onSubmit={handleSubmit} className="flex gap-2">
@@ -139,7 +143,7 @@ export const CertificateValidationView: React.FC<CertificateValidationViewProps>
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Ex: VAL-JVM-2608-A8B1C4 ou CERT-2608-0001"
+                placeholder="Ex: VAL-JVM-2608-A8B1C4X9"
                 value={searchCode}
                 onChange={(e) => setSearchCode(e.target.value)}
                 className="w-full pl-9 pr-3 py-2.5 text-sm border border-slate-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-blue-500 uppercase font-mono font-semibold"
