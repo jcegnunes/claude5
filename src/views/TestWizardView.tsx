@@ -810,7 +810,7 @@ export const TestWizardView: React.FC<TestWizardViewProps> = ({
           id: found.id,
           name: found.name,
           title: found.cargo || 'Responsável Técnico',
-          creaNumber: found.creaOrCft || companyInfo.technicalResponsible?.creaNumber || 'CREA-SP 5069874211/D',
+          creaNumber: found.creaOrCft || companyInfo.technicalResponsible?.creaNumber || '',
           rnp: companyInfo.technicalResponsible?.rnp || '',
           signatureUrl: found.signatureUrl || ''
         };
@@ -821,9 +821,9 @@ export const TestWizardView: React.FC<TestWizardViewProps> = ({
     const rtConfig = companyInfo.technicalResponsible;
     return {
       id: 'configured-company-rt',
-      name: rtConfig?.name || 'Eng. João Victor Medeiros',
-      title: rtConfig?.title || 'Engenheiro Eletricista e de Segurança do Trabalho',
-      creaNumber: rtConfig?.creaNumber || 'CREA-SP 5069874211/D',
+      name: rtConfig?.name || '',
+      title: rtConfig?.title || 'Responsável Técnico',
+      creaNumber: rtConfig?.creaNumber || '',
       rnp: rtConfig?.rnp || '2614897500',
       signatureUrl: rtConfig?.signatureUrl || ''
     };
@@ -882,9 +882,9 @@ export const TestWizardView: React.FC<TestWizardViewProps> = ({
         ...companyInfo,
         technicalResponsible: {
           ...companyInfo.technicalResponsible,
-          name: companyInfo.technicalResponsible?.name || 'Eng. João Victor Medeiros',
-          title: companyInfo.technicalResponsible?.title || 'Engenheiro Eletricista e de Segurança do Trabalho',
-          creaNumber: companyInfo.technicalResponsible?.creaNumber || 'CREA-SP 5069874211/D',
+          name: companyInfo.technicalResponsible?.name || '',
+          title: companyInfo.technicalResponsible?.title || 'Responsável Técnico',
+          creaNumber: companyInfo.technicalResponsible?.creaNumber || '',
           rnp: companyInfo.technicalResponsible?.rnp || '2614897500',
           signatureUrl: newSig
         }
@@ -892,7 +892,7 @@ export const TestWizardView: React.FC<TestWizardViewProps> = ({
       DielectricStorageService.saveCompanyInfo(updatedCompany);
       setCompanyInfo(updatedCompany);
 
-      const matchRtUser = usersList.find(u => u.role === 'responsavel_tecnico' || u.name === (companyInfo.technicalResponsible?.name || 'Eng. João Victor Medeiros'));
+      const matchRtUser = usersList.find(u => u.role === 'responsavel_tecnico' || u.name === (companyInfo.technicalResponsible?.name || ''));
       if (matchRtUser) {
         const updatedRtUser = { ...matchRtUser, signatureUrl: newSig };
         DielectricStorageService.saveUser(updatedRtUser);
@@ -1117,7 +1117,7 @@ export const TestWizardView: React.FC<TestWizardViewProps> = ({
       technicianCftOrCrea: effectiveTechnician.creaOrCft || 'CFT-SP 1458920',
       techResponsibleId: effectiveTechResponsible.id,
       techResponsibleName: effectiveTechResponsible.name,
-      techResponsibleCrea: effectiveTechResponsible.creaNumber || 'CREA-SP 5069874211/D',
+      techResponsibleCrea: effectiveTechResponsible.creaNumber || '',
       testDate: editingTest?.testDate || new Date().toISOString().split('T')[0],
       testTime: editingTest?.testTime || new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
       location: testLocation,
@@ -3530,7 +3530,7 @@ export const TestWizardView: React.FC<TestWizardViewProps> = ({
                 className="w-full p-2.5 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 font-semibold text-slate-800 bg-white"
               >
                 <option value="configured-company-rt">
-                  ★ {companyInfo.technicalResponsible?.name || 'Eng. João Victor Medeiros'} — {companyInfo.technicalResponsible?.creaNumber || 'CREA-SP'} ({companyInfo.technicalResponsible?.title || 'Responsável Técnico'}) [Padrão do Laboratório]
+                  ★ {companyInfo.technicalResponsible?.name || ''} — {companyInfo.technicalResponsible?.creaNumber || 'CREA-SP'} ({companyInfo.technicalResponsible?.title || 'Responsável Técnico'}) [Padrão do Laboratório]
                 </option>
                 {usersList
                   .filter(u => (u.role === 'responsavel_tecnico' || u.role === 'admin') && u.name !== companyInfo.technicalResponsible?.name)
@@ -3563,7 +3563,7 @@ export const TestWizardView: React.FC<TestWizardViewProps> = ({
               title="Assinatura do Responsável Técnico"
               signerName={effectiveTechResponsible.name}
               signerRole={effectiveTechResponsible.title || 'Responsável Técnico'}
-              documentNumber={effectiveTechResponsible.creaNumber || 'CREA-SP 5069874211/D'}
+              documentNumber={effectiveTechResponsible.creaNumber || ''}
               onSave={setTechResponsibleSig}
               onSaveAsDefault={handleSaveRTDefaultSig}
               initialSignature={techResponsibleSig}

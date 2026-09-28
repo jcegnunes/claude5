@@ -110,9 +110,9 @@ export const BackupSettingsView: React.FC = () => {
           ...company,
           technicalResponsible: {
             ...company.technicalResponsible,
-            name: company.technicalResponsible?.name || 'Eng. João Victor Medeiros',
-            title: company.technicalResponsible?.title || 'Engenheiro Eletricista e de Segurança do Trabalho',
-            creaNumber: company.technicalResponsible?.creaNumber || 'CREA-SP 5069874211/D',
+            name: company.technicalResponsible?.name || '',
+            title: company.technicalResponsible?.title || 'Responsável Técnico',
+            creaNumber: company.technicalResponsible?.creaNumber || '',
             rnp: company.technicalResponsible?.rnp || '2614897500',
             signatureUrl: cleaned
           }
@@ -129,7 +129,7 @@ export const BackupSettingsView: React.FC = () => {
       ...company,
       technicalResponsible: {
         ...company.technicalResponsible,
-        name: company.technicalResponsible?.name || 'Eng. João Victor Medeiros',
+        name: company.technicalResponsible?.name || '',
         signatureUrl: ''
       }
     };
@@ -458,7 +458,7 @@ export const BackupSettingsView: React.FC = () => {
   };
 
   const handleResetDemoData = () => {
-    if (window.confirm('Tem certeza de que deseja restaurar os dados de demonstração da JVM Engenharia? Todas as alterações serão substituídas pelos dados de fábrica.')) {
+    if (window.confirm('Limpar os dados deste aparelho e baixar tudo novamente do banco de dados? Alterações ainda não sincronizadas serão perdidas.')) {
       DielectricStorageService.resetToSeedData();
       window.location.reload();
     }
@@ -1888,16 +1888,16 @@ export const BackupSettingsView: React.FC = () => {
           <div className="bg-red-50/70 rounded-2xl p-6 border border-red-200 shadow-xs space-y-3">
             <div className="flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 text-red-600" />
-              <h3 className="font-bold text-xs text-red-900 uppercase">Restaurar Dados de Fábrica</h3>
+              <h3 className="font-bold text-xs text-red-900 uppercase">Recarregar Dados do Banco</h3>
             </div>
             <p className="text-xs text-red-700 leading-relaxed">
-              Recarrega os equipamentos, laudos, clientes e normas originais de demonstração da JVM Engenharia.
+              Apaga os dados guardados neste aparelho e baixa novamente tudo do banco de dados. Sincronize antes para não perder alterações pendentes.
             </p>
             <button
               onClick={handleResetDemoData}
               className="w-full py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors"
             >
-              Restaurar Base de Demonstração
+              Limpar e Recarregar do Banco
             </button>
           </div>
         </div>

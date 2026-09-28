@@ -135,7 +135,7 @@ export const ReportEmissionView: React.FC<ReportEmissionViewProps> = ({
 
     // Initial Responsible Technical info
     if (!techResponsibleName) {
-      setTechResponsibleName(comp.technicalResponsible.name || 'Eng. João Nunes');
+      setTechResponsibleName(comp.technicalResponsible.name || '');
       setTechResponsibleCrea(comp.technicalResponsible.creaNumber || 'CREA-SP 5069812401');
       setTechResponsibleRnp(comp.technicalResponsible.rnp || '261984210-9');
     }

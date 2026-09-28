@@ -64,7 +64,7 @@ export const QuickTechnicianModal: React.FC<QuickTechnicianModalProps> = ({
       cargo: cargo.trim() || 'Analista Executor',
       role,
       creaOrCft: creaOrCft.trim() || undefined,
-      email: email.trim() || `analista.${Date.now()}@jvmengenharia.com.br`,
+      email: email.trim() || `analista.${Date.now()}@sem-email.local`,
       phone: phone.trim() || undefined,
       signatureUrl: signatureUrl || undefined,
       active: true

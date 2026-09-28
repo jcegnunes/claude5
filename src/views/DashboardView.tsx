@@ -77,18 +77,25 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const expiredInstruments = instruments.filter(i => i.calibrationExpiryDate < today);
 
   // Chart Data: Tests per month
-  const monthlyData = [
-    { month: 'Set', ensaios: 18, aprovados: 17, reprovados: 1 },
-    { month: 'Out', ensaios: 24, aprovados: 22, reprovados: 2 },
-    { month: 'Nov', ensaios: 32, aprovados: 30, reprovados: 2 },
-    { month: 'Dez', ensaios: 28, aprovados: 27, reprovados: 1 },
-    { month: 'Jan', ensaios: 35, aprovados: 33, reprovados: 2 },
-    { month: 'Fev (Atual)', ensaios: tests.length + 15, aprovados: approvedTests + 14, reprovados: reprovedTests + 1 }
-  ];
+  // Ensaios reais dos últimos 6 meses (pela data do ensaio)
+  const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+  const monthlyData = Array.from({ length: 6 }, (_, idx) => {
+    const d = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() - (5 - idx));
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const monthTests = tests.filter(t => (t.testDate || '').startsWith(key));
+    return {
+      month: MONTH_NAMES[d.getMonth()] + (idx === 5 ? ' (Atual)' : ''),
+      ensaios: monthTests.length,
+      aprovados: monthTests.filter(t => t.result === 'APROVADO').length,
+      reprovados: monthTests.filter(t => t.result === 'REPROVADO').length
+    };
+  });
 
   // Chart Data: Approval Ratio
   const ratioData = [
-    { name: 'Aprovados', value: approvedTests || 1, color: '#10B981' },
+    { name: 'Aprovados', value: approvedTests, color: '#10B981' },
     { name: 'Reprovados', value: reprovedTests || 0, color: '#EF4444' }
   ];
 
@@ -309,7 +316,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-600">
             <span>Taxa de Aprovação:</span>
             <span className="font-bold text-emerald-600">
-              {tests.length > 0 ? ((approvedTests / tests.length) * 100).toFixed(1) : 100}%
+              {tests.length > 0 ? `${((approvedTests / tests.length) * 100).toFixed(1)}%` : '—'}
             </span>
           </div>
         </div>

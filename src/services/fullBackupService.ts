@@ -509,7 +509,7 @@ export class FullBackupService {
 
     // 7. Human-readable README file
     const readmeContent = `================================================================================
-JVM ENGENHARIA & TREINAMENTOS - SISTEMA DE ENSAIOS DIELÉTRICOS
+SISTEMA DE ENSAIOS DIELÉTRICOS
 PACOTE DE BACKUP COMPLETO COM REGISTROS FOTOGRÁFICOS INTEGRADOS
 ================================================================================
 

@@ -633,7 +633,7 @@ export class SupabaseService {
       const local = DielectricStorageService.getCompanyById(id);
       const comp: Company = local || {
         id,
-        name: id === 'comp-jvm' ? 'JVM Engenharia & Treinamentos' : id,
+        name: 'Empresa',
         legalName: id,
         cnpj: '',
         active: true,
@@ -670,7 +670,7 @@ export class SupabaseService {
     if (targets.length === 0) return { record: test, count: 0 };
 
     const urlMap: Record<string, string> = {};
-    const companyFolder = (test.companyId || 'comp-jvm').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const companyFolder = (test.companyId || 'sem-empresa').replace(/[^a-zA-Z0-9_-]/g, '_');
     const testFolder = String(test.id).replace(/[^a-zA-Z0-9_-]/g, '_');
 
     for (const t of targets) {
@@ -1066,6 +1066,33 @@ export class SupabaseService {
   }
 
   // ===========================================================================
+  // EMPRESA DO USUÁRIO (primeiro acesso em um aparelho)
+  // ===========================================================================
+  /**
+   * Busca a empresa pelo ID direto no banco, grava no aparelho e a torna
+   * ativa (inclusive os dados técnicos do laboratório). Retorna null se não existir.
+   */
+  static async fetchCompanyById(companyId: string): Promise<Company | null> {
+    if (!companyId || !this.canSync()) return null;
+    try {
+      const client = this.getClient();
+      const { data, error } = await client.from('companies').select('*').eq('id', companyId).maybeSingle();
+      if (error || !data || data.deleted_at) return null;
+      const company = rowToCompany(data);
+      DielectricStorageService.saveFromRemote('companies', [company]);
+      this.knownCompanyIds.add(company.id);
+      const local = DielectricStorageService.getCompanyById(company.id);
+      if (local) {
+        DielectricStorageService.setActiveCompany(local);
+        this.applyActiveCompanyFromRemote([data]);
+      }
+      return local || company;
+    } catch {
+      return null;
+    }
+  }
+
+  // ===========================================================================
   // VALIDAÇÃO PÚBLICA (QR CODE)
   // ===========================================================================
   /**
@@ -1137,7 +1164,7 @@ export class SupabaseService {
 
       const userObj = rowToUser(payload.user);
       delete (userObj as any).syncStatus;
-      const homeCompanyId = payload.user.company_id || userObj.companyId || 'comp-jvm';
+      const homeCompanyId = payload.user.company_id || userObj.companyId || '';
       userObj.companyId = companyId || homeCompanyId;
 
       // Mantém o perfil no aparelho (sem senha) para a lista de usuários

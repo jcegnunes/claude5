@@ -107,7 +107,7 @@ export const CertificateValidationView: React.FC<CertificateValidationViewProps>
             </div>
             <div>
               <h1 className="font-extrabold text-lg text-white">Portal de Validação de Autenticidade</h1>
-              <p className="text-xs text-slate-300">JVM Engenharia & Treinamentos • Ensaios Dielétricos NR-10</p>
+              <p className="text-xs text-slate-300">Ensaios Dielétricos NR-10</p>
             </div>
           </div>
 
@@ -202,7 +202,7 @@ export const CertificateValidationView: React.FC<CertificateValidationViewProps>
                           : 'EQUIPAMENTO REPROVADO NO ENSAIO'}
                       </h3>
                       <p className="text-xs opacity-90 mt-0.5">
-                        Registrado oficialmente no laboratório da JVM Engenharia & Treinamentos
+                        Registrado oficialmente no laboratório emissor{testRecord?.companyName ? ` — ${testRecord.companyName}` : ''}
                       </p>
                     </div>
                   </div>

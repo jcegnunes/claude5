@@ -182,6 +182,26 @@ function setLocal<T>(key: string, data: T): boolean {
   }
 }
 
+/** Empresa "vazia" usada antes do cadastro da empresa no primeiro acesso. */
+export const EMPTY_COMPANY: Company = {
+  id: '',
+  name: '',
+  legalName: '',
+  cnpj: '',
+  active: true,
+  createdAt: '1970-01-01T00:00:00.000Z',
+  updatedAt: '1970-01-01T00:00:00.000Z'
+};
+
+/** Usuário "vazio" usado quando não há sessão aberta. */
+export const EMPTY_USER: User = {
+  id: '',
+  name: '',
+  email: '',
+  role: 'tecnico',
+  registrationNumber: ''
+} as User;
+
 export class DielectricStorageService {
   private static isInitialized = false;
 
@@ -190,6 +210,8 @@ export class DielectricStorageService {
     if (typeof window === 'undefined') return;
     if (this.isInitialized) return;
     this.isInitialized = true;
+
+    this.resetDemoDataOnce();
 
     if (!localStorage.getItem(STORAGE_KEYS.NORMS)) {
       setLocal(STORAGE_KEYS.NORMS, INITIAL_NORMS);
@@ -283,9 +305,7 @@ export class DielectricStorageService {
         setLocal(STORAGE_KEYS.COMPANIES, existing);
       }
     }
-    if (!localStorage.getItem(STORAGE_KEYS.ACTIVE_COMPANY)) {
-      setLocal(STORAGE_KEYS.ACTIVE_COMPANY, INITIAL_COMPANIES[0]);
-    }
+    // Empresa ativa: definida no login / cadastro da empresa (sem padrão)
     if (!localStorage.getItem(STORAGE_KEYS.CLIENTS)) {
       setLocal(STORAGE_KEYS.CLIENTS, INITIAL_CLIENTS);
     }
@@ -310,27 +330,6 @@ export class DielectricStorageService {
     if (!localStorage.getItem(STORAGE_KEYS.COMPANY)) {
       setLocal(STORAGE_KEYS.COMPANY, JVM_COMPANY_INFO);
     }
-    // CNPJ oficial da JVM Engenharia (substitui os CNPJs de demonstração)
-    try {
-      const DEMO_CNPJS = ['34.892.115/0001-80', '38.456.789/0001-12'];
-      const JVM_CNPJ = '29.894.500/0001-04';
-      const comps = getLocal<Company[]>(STORAGE_KEYS.COMPANIES, []);
-      const jvm = comps.find(c => c.id === 'comp-jvm');
-      if (jvm && (!jvm.cnpj || DEMO_CNPJS.includes(jvm.cnpj))) {
-        jvm.cnpj = JVM_CNPJ;
-        jvm.updatedAt = new Date().toISOString();
-        setLocal(STORAGE_KEYS.COMPANIES, comps);
-      }
-      const info = getLocal<CompanyLabInfo | null>(STORAGE_KEYS.COMPANY, null);
-      if (info && (!info.cnpj || DEMO_CNPJS.includes(info.cnpj))) {
-        setLocal(STORAGE_KEYS.COMPANY, { ...info, cnpj: JVM_CNPJ });
-      }
-      const active = getLocal<Company | null>(STORAGE_KEYS.ACTIVE_COMPANY, null);
-      if (active && active.id === 'comp-jvm' && (!active.cnpj || DEMO_CNPJS.includes(active.cnpj))) {
-        setLocal(STORAGE_KEYS.ACTIVE_COMPANY, { ...active, cnpj: JVM_CNPJ });
-      }
-    } catch {}
-
     // Sem login automático: a sessão só existe após autenticação no banco.
     // Senhas nunca ficam guardadas no aparelho (remove as de versões antigas).
     try {
@@ -343,13 +342,14 @@ export class DielectricStorageService {
       }
     } catch {}
 
-    // Auto-migrate all entities to ensure companyId is populated
+    // Registros sem empresa passam para a empresa ativa (se já houver uma)
+    const migrationCompanyId = getLocal<Company | null>(STORAGE_KEYS.ACTIVE_COMPANY, null)?.id || '';
     try {
       const allClients = getLocal<Client[]>(STORAGE_KEYS.CLIENTS, INITIAL_CLIENTS);
       let clientsUpdated = false;
       allClients.forEach(c => {
         if (!c.companyId) {
-          c.companyId = 'comp-jvm';
+          c.companyId = migrationCompanyId || c.companyId;
           clientsUpdated = true;
         }
       });
@@ -359,7 +359,7 @@ export class DielectricStorageService {
       let eqUpdated = false;
       allEq.forEach(e => {
         if (!e.companyId) {
-          e.companyId = 'comp-jvm';
+          e.companyId = migrationCompanyId || e.companyId;
           eqUpdated = true;
         }
       });
@@ -369,7 +369,7 @@ export class DielectricStorageService {
       let ordersUpdated = false;
       allOrders.forEach(o => {
         if (!o.companyId) {
-          o.companyId = 'comp-jvm';
+          o.companyId = migrationCompanyId || o.companyId;
           ordersUpdated = true;
         }
       });
@@ -379,7 +379,7 @@ export class DielectricStorageService {
       let instUpdated = false;
       allInst.forEach(i => {
         if (!i.companyId) {
-          i.companyId = 'comp-jvm';
+          i.companyId = migrationCompanyId || i.companyId;
           instUpdated = true;
         }
       });
@@ -389,8 +389,8 @@ export class DielectricStorageService {
       let testsCompUpdated = false;
       allTests.forEach(t => {
         if (!t.companyId) {
-          t.companyId = 'comp-jvm';
-          t.companyName = t.companyName || 'JVM Engenharia & Treinamentos';
+          t.companyId = migrationCompanyId || t.companyId;
+          t.companyName = t.companyName || '';
           testsCompUpdated = true;
         }
       });
@@ -406,13 +406,6 @@ export class DielectricStorageService {
           usersUpdated = true;
         }
       });
-      allUsers.forEach(u => {
-        if (!u.companyId) {
-          u.companyId = 'comp-jvm';
-          u.companyName = u.companyName || 'JVM Engenharia & Treinamentos';
-          usersUpdated = true;
-        }
-      });
       if (usersUpdated) setLocal(STORAGE_KEYS.USERS, allUsers);
     } catch (migrErr) {
       console.warn('Company scoping migration notice:', migrErr);
@@ -421,6 +414,33 @@ export class DielectricStorageService {
     // Migração única: dados que só existiam no antigo IndexedDB voltam para o
     // cache e entram na fila do Supabase. Depois o IndexedDB é apagado.
     this.migrateLegacyIndexedDb();
+  }
+
+  /**
+   * Versão sem dados (v6.2): remove UMA VEZ os dados de demonstração e os
+   * caches antigos do aparelho. Tudo passa a vir do banco (Supabase), e a
+   * empresa é cadastrada pelo usuário no primeiro acesso.
+   */
+  private static resetDemoDataOnce(): void {
+    const FLAG = 'jvm_clean_install_v62';
+    try {
+      if (localStorage.getItem(FLAG)) return;
+      [
+        STORAGE_KEYS.CLIENTS, STORAGE_KEYS.EQUIPMENT, STORAGE_KEYS.SERVICE_ORDERS,
+        STORAGE_KEYS.TESTS, STORAGE_KEYS.INSTRUMENTS, STORAGE_KEYS.USERS,
+        STORAGE_KEYS.COMPANIES, STORAGE_KEYS.ACTIVE_COMPANY, STORAGE_KEYS.COMPANY,
+        STORAGE_KEYS.AUDIT, STORAGE_KEYS.REPORTS, STORAGE_KEYS.NORMS,
+        STORAGE_KEYS.SYNC_QUEUE, STORAGE_KEYS.CONFLICTS, STORAGE_KEYS.LAST_SYNC,
+        STORAGE_KEYS.PULL_CURSORS, STORAGE_KEYS.BOOTSTRAP_V61,
+        STORAGE_KEYS.CURRENT_USER, 'jvm_auth_token', 'jvm_offline_credentials',
+        'jvm_pending_initial_passwords'
+      ].forEach(k => localStorage.removeItem(k));
+      try { sessionStorage.removeItem('jvm_auth_token'); } catch {}
+      localStorage.setItem(FLAG, new Date().toISOString());
+      // O antigo IndexedDB também só guardava dados de demonstração/cache
+      localStorage.setItem(STORAGE_KEYS.IDB_MIGRATED_V61, new Date().toISOString());
+      try { indexedDB.deleteDatabase(LEGACY_IDB_NAME); } catch {}
+    } catch {}
   }
 
   /**
@@ -506,12 +526,8 @@ export class DielectricStorageService {
 
   // Multi-Company Management
   static getCompanies(): Company[] {
-    const comps = getLocal<Company[]>(STORAGE_KEYS.COMPANIES, INITIAL_COMPANIES);
-    if (!comps || comps.length === 0) {
-      setLocal(STORAGE_KEYS.COMPANIES, INITIAL_COMPANIES);
-      return INITIAL_COMPANIES;
-    }
-    return comps;
+    const comps = getLocal<Company[]>(STORAGE_KEYS.COMPANIES, []);
+    return Array.isArray(comps) ? comps.filter(c => c && c.id && !(c as any).deletedAt) : [];
   }
 
   static getCompanyById(id: string): Company | undefined {
@@ -519,13 +535,16 @@ export class DielectricStorageService {
   }
 
   static getActiveCompany(): Company {
-    let active = getLocal<Company | null>(STORAGE_KEYS.ACTIVE_COMPANY, null);
-    if (!active || !active.id) {
-      const comps = this.getCompanies();
-      active = comps[0] || INITIAL_COMPANIES[0];
-      setLocal(STORAGE_KEYS.ACTIVE_COMPANY, active);
+    const active = getLocal<Company | null>(STORAGE_KEYS.ACTIVE_COMPANY, null);
+    if (active && active.id) return active;
+    // Sem empresa ativa: usa a empresa do usuário logado, se já estiver no aparelho
+    const user = getLocal<User | null>(STORAGE_KEYS.CURRENT_USER, null);
+    const own = user?.companyId ? this.getCompanies().find(c => c.id === user.companyId) : undefined;
+    if (own) {
+      setLocal(STORAGE_KEYS.ACTIVE_COMPANY, own);
+      return own;
     }
-    return active;
+    return EMPTY_COMPANY;
   }
 
   static setActiveCompany(company: Company): void {
@@ -598,7 +617,7 @@ export class DielectricStorageService {
 
   // Current User
   static getCurrentUser(): User {
-    return getLocal<User>(STORAGE_KEYS.CURRENT_USER, INITIAL_USERS[1]);
+    return getLocal<User>(STORAGE_KEYS.CURRENT_USER, EMPTY_USER) || EMPTY_USER;
   }
 
   static setCurrentUser(user: User): void {
@@ -1031,7 +1050,7 @@ export class DielectricStorageService {
       }
     }
 
-    const targetCompId = resolvedCompanyId || activeComp.id || 'comp-jvm';
+    const targetCompId = resolvedCompanyId || activeComp.id || '';
 
     const updatedOS: ServiceOrder = {
       ...os,
@@ -2268,7 +2287,7 @@ export class DielectricStorageService {
   }
 
   /**
-   * Restaura a base LOCAL de demonstração. Não envia nada ao Supabase:
+   * Limpa a base LOCAL do aparelho. Não envia nada ao Supabase:
    * os cursores são zerados para que a próxima sincronização baixe
    * novamente todos os dados reais da nuvem.
    */
@@ -2293,7 +2312,9 @@ export class DielectricStorageService {
     setLocal(STORAGE_KEYS.CONFLICTS, []);
     setLocal(STORAGE_KEYS.PULL_CURSORS, {});
 
-    this.addAuditLog('ALTERACAO', 'BancoDeDados', 'reset', 'Base local restaurada para os padrões oficiais da JVM Engenharia');
+    setLocal(STORAGE_KEYS.COMPANIES, []);
+    localStorage.removeItem(STORAGE_KEYS.ACTIVE_COMPANY);
+    setLocal(STORAGE_KEYS.REPORTS, []);
     window.dispatchEvent(new Event('jvm-data-changed'));
   }
 }

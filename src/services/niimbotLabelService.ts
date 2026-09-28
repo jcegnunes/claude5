@@ -168,7 +168,7 @@ function render50x30Layout(
   ctx.font = `bold ${Math.round(2.6 * d * s)}px "Helvetica Neue", Arial, sans-serif`;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  const companyTitle = (company.name || 'JVM ENGENHARIA').toUpperCase();
+  const companyTitle = (company.name || '').toUpperCase();
   ctx.fillText(companyTitle.length > 20 ? companyTitle.substring(0, 20) + '...' : companyTitle, m + 2 * s * d, m + headerHeight / 2);
 
   ctx.textAlign = 'right';
@@ -281,7 +281,7 @@ function render50x50Layout(
   ctx.font = `bold ${Math.round(2.8 * d * s)}px "Helvetica Neue", Arial, sans-serif`;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  ctx.fillText((company.name || 'JVM ENGENHARIA').toUpperCase(), m + 2 * s * d, m + headerHeight / 2);
+  ctx.fillText((company.name || '').toUpperCase(), m + 2 * s * d, m + headerHeight / 2);
 
   ctx.textAlign = 'right';
   ctx.font = `bold ${Math.round(2.3 * d * s)}px "Helvetica Neue", Arial, sans-serif`;
@@ -372,7 +372,7 @@ function render50x40Layout(
   ctx.font = `bold ${Math.round(2.6 * d * s)}px "Helvetica Neue", Arial, sans-serif`;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  ctx.fillText((company.name || 'JVM ENGENHARIA').toUpperCase(), m + 2 * s * d, m + headerHeight / 2);
+  ctx.fillText((company.name || '').toUpperCase(), m + 2 * s * d, m + headerHeight / 2);
 
   ctx.textAlign = 'right';
   ctx.font = `bold ${Math.round(2.2 * d * s)}px "Helvetica Neue", Arial, sans-serif`;
@@ -477,7 +477,7 @@ function render40x30Layout(
   ctx.font = `bold ${Math.round(2.3 * d * s)}px "Helvetica Neue", Arial, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('JVM ENGENHARIA • NR-10', w / 2, m + headerHeight / 2);
+  ctx.fillText(`${(company.name || '').toUpperCase()}${company.name ? ' • ' : ''}NR-10`, w / 2, m + headerHeight / 2);
 
   const leftX = m + 1.5 * s * d;
   let curY = m + headerHeight + 2.0 * s * d;
@@ -879,7 +879,7 @@ export async function buildNiimbotJCPSObject(
       y: 2.0,
       width: config.widthMm - 16.0,
       height: 4.0,
-      content: (company.name || 'JVM ENGENHARIA').toUpperCase(),
+      content: (company.name || '').toUpperCase(),
       fontSize: 8,
       fontWeight: 'bold',
       textAlign: 'left',

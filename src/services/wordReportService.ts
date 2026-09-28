@@ -1987,7 +1987,7 @@ export async function exportSingleLaudoToWord(test: TestRecord, companyInfo?: Co
                   </td>
                   <td valign="middle">
                     <div class="company-name">${escapeXml(company.name.toUpperCase())}</div>
-                    <div class="company-legal">${escapeXml(company.legalName || 'JVM ENGENHARIA E TREINAMENTOS LTDA')}</div>
+                    <div class="company-legal">${escapeXml(company.legalName || company.name || '')}</div>
                     <div class="company-meta">
                       ${escapeXml(company.creaCompanyRegister || 'CREA-SP nº 2026/SP-LAB')} &bull; CNPJ: ${escapeXml(company.cnpj)}<br/>
                       ${escapeXml(addressLine)} &bull; Tel: ${escapeXml(company.phone)} &bull; ${escapeXml(company.email)}

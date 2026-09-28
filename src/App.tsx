@@ -33,6 +33,8 @@ import { DielectricStorageService } from './services/syncEngine';
 import { AuthService } from './services/authService';
 import { SupabaseService } from './services/supabaseService';
 import { LoginView } from './views/LoginView';
+import { CompanySetupView } from './views/CompanySetupView';
+import { EMPTY_USER } from './services/syncEngine';
 
 export default function App() {
   // Check for Mobile Camera Companion Mode (?cam=JVM-CAM-XXXX or #cam=JVM-CAM-XXXX)
@@ -57,9 +59,40 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<User>(() => {
     const storedUser = AuthService.getCurrentUser();
     if (storedUser) return storedUser;
-    const users = DielectricStorageService.getUsers();
-    return users.find(u => u.role === 'responsavel_tecnico') || users[0];
+    return EMPTY_USER;
   });
+
+  // Primeiro acesso: o usuário sem empresa cadastrada vê a tela "Cadastre sua empresa".
+  // null = verificando (consulta a empresa do usuário no banco, se preciso)
+  const [needsCompanySetup, setNeedsCompanySetup] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!isAuthenticated || isDirectValidation || initialCamSession) {
+      setNeedsCompanySetup(false);
+      return;
+    }
+    let cancelled = false;
+    const companyId = currentUser?.companyId;
+    const local = companyId ? DielectricStorageService.getCompanyById(companyId) : undefined;
+    if (local && local.cnpj) {
+      if (DielectricStorageService.getActiveCompany().id !== local.id) {
+        DielectricStorageService.setActiveCompany(local);
+      }
+      setNeedsCompanySetup(false);
+      return;
+    }
+    if (!companyId) {
+      setNeedsCompanySetup(true);
+      return;
+    }
+    setNeedsCompanySetup(null);
+    SupabaseService.fetchCompanyById(companyId).then(found => {
+      if (cancelled) return;
+      setNeedsCompanySetup(!(found && found.cnpj));
+      if (found) setDataVersion(v => v + 1);
+    });
+    return () => { cancelled = true; };
+  }, [isAuthenticated, currentUser?.id, currentUser?.companyId]);
 
   // Offline / Online & Sync
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
@@ -253,8 +286,34 @@ export default function App() {
     return (
       <LoginView
         onLoginSuccess={(user) => {
+          setNeedsCompanySetup(null);
           setCurrentUser(user);
           setIsAuthenticated(true);
+          setDataVersion(v => v + 1);
+        }}
+      />
+    );
+  }
+
+  // Verificando a empresa do usuário no banco
+  if (needsCompanySetup === null) {
+    return (
+      <div className="min-h-screen bg-[#EEF1F4] flex items-center justify-center">
+        <p className="text-[14px] text-[#5E6A78]" role="status">Carregando dados da empresa…</p>
+      </div>
+    );
+  }
+
+  // Primeiro acesso: cadastro da empresa
+  if (needsCompanySetup) {
+    return (
+      <CompanySetupView
+        user={currentUser}
+        onLogout={handleLogout}
+        onComplete={(user) => {
+          setCurrentUser(user);
+          setNeedsCompanySetup(false);
+          setActiveView('dashboard');
           setDataVersion(v => v + 1);
         }}
       />

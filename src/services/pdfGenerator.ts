@@ -296,7 +296,7 @@ export async function renderLaudoToDoc(
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(6.8);
   doc.setTextColor(textLabel[0], textLabel[1], textLabel[2]);
-  doc.text(company.legalName || 'JVM ENGENHARIA E TREINAMENTOS LTDA', textLeftX, headerTopY + 7.6);
+  doc.text(company.legalName || company.name || '', textLeftX, headerTopY + 7.6);
 
   doc.setFontSize(6.4);
   doc.setTextColor(textMuted[0], textMuted[1], textMuted[2]);

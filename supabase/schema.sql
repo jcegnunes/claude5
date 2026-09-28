@@ -1,5 +1,5 @@
 -- =========================================================================
--- JVM DIELECTRIC LAB - ESQUEMA SUPABASE (POSTGRESQL) - BANCO ÚNICO DA PLATAFORMA
+-- DIELECTRIC LAB - ESQUEMA SUPABASE (POSTGRESQL) - BANCO ÚNICO DA PLATAFORMA
 -- Projeto: cdtbzbshylrcprvmjpgc  |  https://cdtbzbshylrcprvmjpgc.supabase.co
 --
 -- Este script é IDEMPOTENTE: pode ser executado quantas vezes for necessário
@@ -764,7 +764,7 @@ GRANT INSERT (
   signature_url, custom_settings, payload, device_id, deleted_at
 ) ON public.users TO anon, authenticated;
 GRANT UPDATE (
-  company_id, company_name, name, email, username, role, cargo,
+  id, company_id, company_name, name, email, username, role, cargo,
   registration_number, crea_or_cft, phone, active, is_master_admin,
   signature_url, custom_settings, payload, device_id, deleted_at
 ) ON public.users TO anon, authenticated;
@@ -845,38 +845,14 @@ REVOKE ALL ON FUNCTION public.jvm_set_initial_password(TEXT, TEXT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.jvm_set_initial_password(TEXT, TEXT) TO anon, authenticated;
 
 -- -------------------------------------------------------------------------
--- DADOS INICIAIS: empresa padrão e administrador master
+-- DADOS INICIAIS: nenhum. O banco começa vazio.
+-- Crie o primeiro usuário com o comando abaixo (ajuste os dados) e, no
+-- primeiro acesso, ele cadastra a própria empresa pela tela do sistema:
+--
+--   INSERT INTO public.users (id, name, email, username, role, is_master_admin, password_hash)
+--   VALUES ('usr-admin', 'Seu Nome', 'voce@suaempresa.com.br', 'admin',
+--           'admin', true, 'SuaSenhaForte');
 -- -------------------------------------------------------------------------
-INSERT INTO public.companies (id, name, legal_name, cnpj, city, state, phone, email, active)
-VALUES (
-  'comp-jvm',
-  'JVM Engenharia & Treinamentos',
-  'JVM Engenharia e Segurança do Trabalho Ltda',
-  '29.894.500/0001-04',
-  'Campinas',
-  'SP',
-  '(11) 98765-4321',
-  'contato@jvmengenharia.com.br',
-  true
-) ON CONFLICT (id) DO NOTHING;
-
-INSERT INTO public.users (
-  id, company_id, company_name, name, email, role, cargo,
-  registration_number, crea_or_cft, phone, password_hash, active, is_master_admin
-)
-VALUES (
-  'usr-master-admin-001', 'comp-jvm', 'JVM Engenharia & Treinamentos',
-  'Eng. João Nunes da Silva', 'joao.nunues@jvmengenharia.com.br',
-  'responsavel_tecnico', 'Engenheiro Eletricista / Responsável Técnico',
-  'CREA/SP 506894123-0', 'CREA/SP 506894123-0', '(11) 98765-4321',
-  'Jvm@141519', true, true
-) ON CONFLICT (id) DO NOTHING;
-
--- CNPJ oficial da JVM Engenharia (substitui apenas os CNPJs de demonstração)
-UPDATE public.companies
-   SET cnpj = '29.894.500/0001-04'
- WHERE id = 'comp-jvm'
-   AND (cnpj IS NULL OR cnpj IN ('', '38.456.789/0001-12', '34.892.115/0001-80'));
 
 -- =========================================================================
 -- FIM DO SCRIPT

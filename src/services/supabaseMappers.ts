@@ -210,7 +210,7 @@ export function rowToCompany(row: any): Company {
 export function userToRow(u: User, deviceId: string): Record<string, any> {
   return {
     id: u.id,
-    company_id: u.companyId || 'comp-jvm',
+    company_id: u.companyId || null,
     company_name: u.companyName || null,
     name: u.name,
     email: (u.email || '').trim().toLowerCase(),
@@ -237,8 +237,8 @@ export function rowToUser(row: any): User {
   return withSyncMeta<User>({
     ...p,
     id: row.id,
-    companyId: row.company_id || p.companyId || 'comp-jvm',
-    companyName: row.company_name || p.companyName || 'JVM Engenharia & Treinamentos',
+    companyId: row.company_id || p.companyId || undefined,
+    companyName: row.company_name || p.companyName || '',
     name: row.name,
     email: row.email,
     role: row.role,
@@ -261,7 +261,7 @@ export function rowToUser(row: any): User {
 export function clientToRow(c: Client, deviceId: string): Record<string, any> {
   return {
     id: c.id,
-    company_id: c.companyId || 'comp-jvm',
+    company_id: c.companyId || null,
     razao_social: c.razaoSocial || c.nomeFantasia || 'Cliente',
     nome_fantasia: c.nomeFantasia || c.razaoSocial,
     cnpj: c.cnpj || '',
@@ -316,7 +316,7 @@ export function rowToClient(row: any): Client {
 export function equipmentToRow(eq: Equipment, deviceId: string): Record<string, any> {
   return {
     id: eq.id,
-    company_id: eq.companyId || 'comp-jvm',
+    company_id: eq.companyId || null,
     uuid: eq.uuid || eq.id,
     client_id: eq.clientId || null,
     client_name: eq.clientName || null,
@@ -410,7 +410,7 @@ export function rowToEquipment(row: any): Equipment {
 export function serviceOrderToRow(os: ServiceOrder, deviceId: string): Record<string, any> {
   return {
     id: os.id,
-    company_id: os.companyId || 'comp-jvm',
+    company_id: os.companyId || null,
     os_number: os.osNumber || `OS-${os.id}`,
     client_id: os.clientId || null,
     client_name: (os.clientName && os.clientName.trim()) || 'Cliente Geral',
@@ -470,7 +470,7 @@ const TEST_HEAVY_FIELDS = ['photos', 'technicianSignature', 'techResponsibleSign
 export function testToRow(t: TestRecord, deviceId: string): Record<string, any> {
   return {
     id: t.id,
-    company_id: t.companyId || 'comp-jvm',
+    company_id: t.companyId || null,
     uuid: t.uuid || `uuid-${t.id}`,
     test_number: t.testNumber || t.id,
     report_number: t.reportNumber || t.testNumber || t.id,
@@ -627,7 +627,7 @@ export function rowToTest(row: any): TestRecord {
 export function instrumentToRow(inst: LabInstrument, deviceId: string): Record<string, any> {
   return {
     id: inst.id,
-    company_id: inst.companyId || 'comp-jvm',
+    company_id: inst.companyId || null,
     name: `${inst.type || 'Instrumento'} - ${inst.model || ''}`.trim(),
     type: inst.type || 'Instrumento',
     manufacturer: inst.manufacturer || null,
@@ -699,7 +699,7 @@ export function rowToNorm(row: any): NormCriterion {
 export function reportToRow(r: ConsolidatedReport, deviceId: string): Record<string, any> {
   return {
     id: r.id,
-    company_id: r.companyId || 'comp-jvm',
+    company_id: r.companyId || null,
     report_code: r.reportCode || null,
     client_id: r.clientId || null,
     client_name: r.clientName || null,

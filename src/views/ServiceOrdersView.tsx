@@ -173,7 +173,7 @@ export const ServiceOrdersView: React.FC<ServiceOrdersViewProps> = ({ onStartTes
 
     const newOS: ServiceOrder = {
       id: 'os-' + Date.now(),
-      companyId: (client as any)?.companyId || DielectricStorageService.getActiveCompany().id || 'comp-jvm',
+      companyId: (client as any)?.companyId || DielectricStorageService.getActiveCompany().id || undefined,
       osNumber: nextNum,
       clientId,
       clientName: client?.nomeFantasia || client?.razaoSocial || 'Cliente Geral',

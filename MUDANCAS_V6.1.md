@@ -68,3 +68,14 @@ Layout mantido. Mudanças apenas de texto/ação:
 - "Esqueci minha senha" abre um pedido de redefinição por e-mail ao administrador
   (as senhas são cadastradas no banco de dados).
 - CNPJ oficial da JVM aplicado nos dados padrão, no script SQL e nos aparelhos já instalados.
+
+## Versão sem dados (v6.2)
+- Removidos todos os dados de demonstração (empresas, usuários, clientes, EPIs, OS, ensaios,
+  instrumentos, auditoria). Mantidas apenas as normas técnicas.
+- Tela de login sem empresa: apenas Usuário, Senha e "Esqueci minha senha".
+- Nova tela **"Cadastre sua empresa"** no primeiro acesso (com busca de CNPJ e CEP).
+- `schema.sql` não insere mais empresa nem usuário; novo `limpar_dados.sql` zera o banco.
+- Laudos, certificados e etiquetas não usam mais nomes/CREA/razão social de demonstração
+  como padrão; o painel mostra gráficos com os ensaios reais (antes havia números fictícios).
+- Aparelhos com a versão anterior apagam uma única vez os dados de demonstração locais.
+- Corrigida permissão do banco que impediria o app de atualizar o cadastro do usuário.

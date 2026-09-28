@@ -186,7 +186,7 @@ export async function exportTestsSummaryReportPDF(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7.2);
   doc.setTextColor(226, 232, 240); // slate-200
-  const labSub = `${company.legalName || company.name || 'JVM Engenharia'} | CNPJ: ${company.cnpj || ''} | Registro CREA: ${company.creaCompanyRegister || 'N/A'}`;
+  const labSub = `${company.legalName || company.name || ''} | CNPJ: ${company.cnpj || ''} | Registro CREA: ${company.creaCompanyRegister || 'N/A'}`;
   doc.text(labSub, textStartX, currentY + 13);
 
   // Linha 3: Endereço e Contatos
@@ -609,7 +609,7 @@ export async function exportTestsSummaryReportPDF(
   doc.setFontSize(7.5);
   doc.setTextColor(15, 23, 42);
   const techName = customOptions?.techResponsibleName || company.technicalResponsible?.name || 'Responsável Técnico / Engenheiro Eletricista';
-  const techTitle = company.technicalResponsible?.title || 'Engenheiro Eletricista e de Segurança do Trabalho';
+  const techTitle = company.technicalResponsible?.title || 'Responsável Técnico';
   const creaNum = customOptions?.techResponsibleCrea || company.technicalResponsible?.creaNumber || company.creaCompanyRegister || 'N/A';
   const rnpNum = customOptions?.techResponsibleRnp || company.technicalResponsible?.rnp;
   

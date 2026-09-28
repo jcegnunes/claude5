@@ -95,3 +95,32 @@ Papéis (`role`): `admin`, `responsavel_tecnico`, `tecnico`, `administrativo`.
 - Sem internet, entra apenas quem já fez login com internet naquele aparelho nos
   últimos 30 dias.
 - Após a atualização, todos precisam entrar de novo uma vez (não há mais login automático).
+
+## Versão sem dados (instalação limpa)
+
+O sistema é entregue **sem nenhum dado**: nada de empresas, usuários, clientes, EPIs,
+ordens de serviço, ensaios ou instrumentos pré-carregados. Só as normas técnicas
+(referência normativa) acompanham o sistema.
+
+1. **Banco novo ou zerado** — execute `supabase/schema.sql`. Para apagar dados que já
+   existam no banco, execute `supabase/limpar_dados.sql` (irreversível; faça backup antes
+   e apague as fotos em Storage → `jvm-evidencias`).
+2. **Primeiro usuário** — no SQL Editor:
+   ```sql
+   INSERT INTO public.users (id, name, email, username, role, is_master_admin, password_hash)
+   VALUES ('usr-admin', 'Seu Nome', 'voce@suaempresa.com.br', 'admin', 'admin', true, 'SuaSenhaForte');
+   ```
+3. **Primeiro acesso** — entre no app com esse usuário e senha. O sistema abre a tela
+   **"Cadastre sua empresa"** (CNPJ com busca automática na Receita, endereço, contato e
+   responsável técnico). Esses dados vão para o banco e aparecem nos laudos e certificados.
+4. **Outros usuários da mesma empresa** — crie o usuário já vinculado à empresa:
+   ```sql
+   -- descubra o id da empresa
+   SELECT id, name, cnpj FROM public.companies;
+   INSERT INTO public.users (id, company_id, name, email, username, role, password_hash)
+   VALUES ('usr-joao', '<id da empresa>', 'João Lima', 'joao@suaempresa.com.br', 'joao', 'tecnico', 'Senha@2026');
+   ```
+   Usuário criado **sem** `company_id` cadastra uma empresa nova no primeiro acesso.
+
+Aparelhos que já tinham a versão anterior apagam os dados de demonstração guardados
+localmente na primeira abertura desta versão e passam a mostrar apenas o que está no banco.

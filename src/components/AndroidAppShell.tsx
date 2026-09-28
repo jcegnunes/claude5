@@ -310,7 +310,7 @@ export const AndroidAppShell: React.FC<AndroidAppShellProps> = ({
 
             <div className="leading-tight">
               <span className="text-[9px] uppercase tracking-wider font-bold text-orange-400 block">
-                JVM ENGENHARIA • ANDROID
+                {(company.name || 'Ensaios').toUpperCase()} • ANDROID
               </span>
               <h1 className="text-xs sm:text-sm font-extrabold text-white truncate max-w-[200px] sm:max-w-[280px]">
                 {getViewTitle()}

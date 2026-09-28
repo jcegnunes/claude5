@@ -2,21 +2,6 @@ import { User, UserRole, Company } from '../types';
 import { DielectricStorageService } from './syncEngine';
 import { SupabaseService } from './supabaseService';
 
-/**
- * Perfil do Administrador Master (apenas dados de exibição).
- * A SENHA NÃO FICA NO APP: é cadastrada e conferida no banco de dados.
- */
-export const MASTER_ADMIN_CONFIG = {
-  name: 'Eng. João Nunes da Silva',
-  email: 'joao.nunues@jvmengenharia.com.br',
-  role: 'responsavel_tecnico' as UserRole,
-  registrationNumber: 'CREA/SP 506894123-0',
-  phone: '(11) 98765-4321',
-  isMasterAdmin: true,
-  companyId: 'comp-jvm',
-  companyName: 'JVM Engenharia & Treinamentos'
-};
-
 /** Credencial offline: prova de senha (PBKDF2) de quem já entrou neste aparelho. */
 interface OfflineCredential {
   userId: string;
@@ -60,28 +45,6 @@ async function derivePasswordHash(password: string, salt: Uint8Array, iterations
 export class AuthService {
   private static AUTH_TOKEN_KEY = 'jvm_auth_token';
   private static CURRENT_USER_KEY = 'jvm_dielectric_current_user';
-
-  static getMasterAdminUser(): User {
-    return {
-      id: 'usr-master-admin-001',
-      name: MASTER_ADMIN_CONFIG.name,
-      email: MASTER_ADMIN_CONFIG.email,
-      role: MASTER_ADMIN_CONFIG.role,
-      registrationNumber: MASTER_ADMIN_CONFIG.registrationNumber,
-      phone: MASTER_ADMIN_CONFIG.phone,
-      isMasterAdmin: true,
-      companyId: MASTER_ADMIN_CONFIG.companyId,
-      companyName: MASTER_ADMIN_CONFIG.companyName,
-      customSettings: {
-        defaultValidityMonths: 6,
-        climateLimits: {
-          tempMin: 18,
-          tempMax: 28,
-          humidityMax: 70
-        }
-      }
-    };
-  }
 
   static getAvailableCompanies(): Company[] {
     return DielectricStorageService.getCompanies();
@@ -137,7 +100,7 @@ export class AuthService {
   }
 
   private static applyCompany(user: User, companyId?: string): User {
-    const targetCompId = companyId || user.companyId || 'comp-jvm';
+    const targetCompId = companyId || user.companyId || '';
     const comp = DielectricStorageService.getCompanyById(targetCompId);
     const { password: _pw, ...clean } = user;
     return {

@@ -8,12 +8,6 @@ interface LoginViewProps {
   onLoginSuccess: (user: User) => void;
 }
 
-/** Dados fixos exibidos na tela de acesso. */
-const EMPRESA = {
-  nome: 'JVM Engenharia',
-  cnpj: '29.894.500/0001-04'
-};
-
 /**
  * Tela de acesso simplificada: usuário, senha e recuperação de senha.
  * O usuário e a senha são conferidos no banco de dados (Supabase).
@@ -26,11 +20,12 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showForgot, setShowForgot] = useState(false);
 
+  // E-mail do administrador: o da empresa cadastrada neste aparelho, se houver
   const adminEmail = (() => {
     try {
-      return DielectricStorageService.getCompanyInfo().email || 'laboratorio@jvmengenharia.com.br';
+      return DielectricStorageService.getCompanyInfo().email || '';
     } catch {
-      return 'laboratorio@jvmengenharia.com.br';
+      return '';
     }
   })();
 
@@ -54,7 +49,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   };
 
   const resetMailto = () => {
-    const subject = encodeURIComponent('Redefinição de senha - JVM Dielectric Lab');
+    const subject = encodeURIComponent('Redefinição de senha');
     const body = encodeURIComponent(
       `Olá,\n\nSolicito a redefinição da minha senha de acesso.\n\nUsuário: ${login.trim() || '(informe seu usuário ou e-mail)'}\n\nObrigado.`
     );
@@ -69,18 +64,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     <div className="min-h-screen bg-[#EEF1F4] flex items-center justify-center px-4 py-10">
       <main className="w-full max-w-[360px]">
         <div className="bg-white border border-[#DCE1E7] rounded-[10px] px-7 pt-8 pb-7">
-          {/* Identificação da empresa */}
-          <header className="flex items-center gap-3 mb-8">
-            <div
-              aria-hidden="true"
-              className="w-10 h-10 rounded-md bg-[#D9480F] text-white flex items-center justify-center text-[13px] font-bold tracking-tight shrink-0"
-            >
-              JVM
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-[18px] leading-tight font-semibold text-[#1D2733]">{EMPRESA.nome}</h1>
-              <p className="text-[13px] text-[#5E6A78] tabular-nums">CNPJ {EMPRESA.cnpj}</p>
-            </div>
+          <header className="mb-7">
+            <h1 className="text-[20px] leading-tight font-semibold text-[#1D2733]">Entrar</h1>
           </header>
 
           {!showForgot ? (
@@ -157,8 +142,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             <div className="space-y-4">
               <h2 className="text-[15px] font-semibold text-[#1D2733]">Redefinir senha</h2>
               <p className="text-[14px] leading-relaxed text-[#5E6A78]">
-                As senhas são cadastradas pelo administrador do sistema. Envie o pedido e você
-                receberá uma nova senha de acesso.
+                As senhas são cadastradas pelo administrador do sistema. Peça a ele uma nova
+                senha informando o seu usuário.
               </p>
               <div>
                 <label htmlFor="reset-usuario" className="block text-[13px] font-medium text-[#1D2733] mb-1.5">
@@ -176,6 +161,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                   className={inputClass}
                 />
               </div>
+              {adminEmail && (<>
               <a
                 href={resetMailto()}
                 className="w-full h-11 rounded-md bg-[#D9480F] hover:bg-[#C23F0C] text-white text-[15px] font-semibold transition-colors flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#D9480F]"
@@ -185,6 +171,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
               <p className="text-[12px] text-[#5E6A78] text-center">
                 Ou escreva para <span className="text-[#1D2733]">{adminEmail}</span>
               </p>
+              </>)}
               <div className="text-center">
                 <button
                   type="button"

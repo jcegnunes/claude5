@@ -1232,7 +1232,7 @@ export const EquipmentView: React.FC<EquipmentViewProps> = ({
             </div>
 
             <div className="border-2 border-dashed border-slate-300 p-4 rounded-xl bg-slate-50 space-y-2">
-              <span className="text-xs font-black text-[#0A2540] block">JVM ENGENHARIA</span>
+              <span className="text-xs font-black text-[#0A2540] block">{(company.name || '').toUpperCase()}</span>
               <img src={qrCodeModalData.qrUrl} alt="QR Code" className="w-36 h-36 mx-auto bg-white p-1 rounded-lg border border-slate-200 shadow-xs" />
               <div className="text-xs font-mono font-bold text-blue-700">{qrCodeModalData.equipment.tag}</div>
               <p className="text-[10px] text-slate-500 uppercase">
