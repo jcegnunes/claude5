@@ -99,3 +99,11 @@ Layout mantido. Mudanças apenas de texto/ação:
 ## Recriação do banco (v6.3.3)
 - Novo `supabase/recriar_banco.sql`: apaga todas as tabelas/views/funções do schema public
   e recria o banco inteiro no padrão do projeto, num único passo.
+
+## App instalável e offline (v6.4)
+- PWA com service worker (vite-plugin-pwa): o app inteiro fica no aparelho e abre sem internet.
+- Ícones do app criados (antes o manifesto apontava para ícones inexistentes e a instalação não era oferecida).
+- Botão "Instalar" passa a abrir a instalação nativa do Android; instruções para iPhone.
+- Pedido de armazenamento persistente (o navegador não apaga os ensaios pendentes).
+- Fotos do Supabase Storage ficam disponíveis offline depois de vistas.
+- `.htaccess`: index/service worker sem cache (atualizações chegam aos celulares).

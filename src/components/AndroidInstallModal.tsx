@@ -1,3 +1,4 @@
+import { promptInstall, isIOS, isStandalone } from '../services/pwaInstallService';
 import React, { useState, useEffect } from 'react';
 import { 
   Smartphone, 
@@ -69,12 +70,11 @@ export const AndroidInstallModal: React.FC<AndroidInstallModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleInstallClick = () => {
-    // @ts-expect-error window deferredPrompt
-    if (window.deferredPrompt) {
-      // @ts-expect-error window deferredPrompt
-      window.deferredPrompt.prompt();
-    } else {
+  const handleInstallClick = async () => {
+    // Instalação nativa do navegador (Android/Chrome/Edge). No iPhone, e quando o
+    // navegador não oferece, mostra as instruções manuais.
+    const result = await promptInstall();
+    if (result === 'unavailable') {
       setInstallPromptTriggered(true);
     }
   };
@@ -498,6 +498,18 @@ export const AndroidInstallModal: React.FC<AndroidInstallModalProps> = ({
                   </button>
                 </div>
               </div>
+
+              {installPromptTriggered && (
+                <div className="p-3 bg-slate-800/60 rounded-xl border border-slate-700/60 text-[11px] text-slate-300 space-y-1">
+                  {isStandalone() ? (
+                    <span>O aplicativo já está instalado e aberto neste dispositivo.</span>
+                  ) : isIOS() ? (
+                    <span>No iPhone/iPad: abra no <strong>Safari</strong>, toque em <strong>Compartilhar</strong> e depois em <strong>Adicionar à Tela de Início</strong>.</span>
+                  ) : (
+                    <span>No Android: abra no <strong>Chrome</strong>, toque no menu <strong>⋮</strong> e depois em <strong>Instalar app</strong> (ou <strong>Adicionar à tela inicial</strong>).</span>
+                  )}
+                </div>
+              )}
 
               {/* Steps */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-[11px]">

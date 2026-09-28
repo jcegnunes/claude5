@@ -7,3 +7,24 @@
   RewriteCond %{REQUEST_FILENAME} !-l
   RewriteRule . /index.html [L]
 </IfModule>
+
+# App instalável (PWA): estes arquivos NUNCA podem ficar em cache no navegador,
+# senão os celulares continuam presos numa versão antiga do sistema.
+<IfModule mod_headers.c>
+  <FilesMatch "^(index\.html|sw\.js|registerSW\.js|manifest\.webmanifest)$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+  </FilesMatch>
+  # Arquivos com hash no nome (mudam a cada versão): cache longo
+  <FilesMatch "\.(js|css|woff2?)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+  # Repetido de propósito: sw.js/registerSW.js também casam com ".js" acima,
+  # e no Apache vale a última regra.
+  <FilesMatch "^(index\.html|sw\.js|registerSW\.js|manifest\.webmanifest)$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+  </FilesMatch>
+</IfModule>
+
+<IfModule mod_mime.c>
+  AddType application/manifest+json .webmanifest
+</IfModule>

@@ -162,3 +162,22 @@ Tabelas de outros sistemas são apenas listadas. Para apagá-las, troque
 Apaga **todas** as tabelas do schema `public` (do app e de outros sistemas), com os dados,
 e cria tudo novo no padrão deste projeto. Depois, crie o primeiro usuário (seção
 "PRIMEIRO USUÁRIO" no final do script) e, no primeiro acesso ao app, cadastre a empresa.
+
+## Instalar no celular e usar offline (PWA) — v6.4
+
+O sistema pode ser **instalado pelo navegador** e **abre sem internet**.
+
+**Android (Chrome):** abra o endereço do sistema → menu **⋮** → **Instalar app**
+(ou use o botão "Instalar Aplicativo Neste Dispositivo" no Modo Android).
+**iPhone/iPad (Safari):** botão **Compartilhar** → **Adicionar à Tela de Início**.
+
+Como funciona:
+1. O **primeiro acesso precisa de internet** (login e download do app e dos dados da empresa).
+2. Depois, sem internet: o app abre, o login funciona para quem já entrou naquele aparelho
+   (até 30 dias) e ensaios, EPIs, clientes, OS e fotos são salvos no aparelho, numa fila.
+3. Quando a internet volta, a fila é enviada ao Supabase automaticamente (ao abrir o app,
+   ao reconectar ou pelo botão Sincronizar). As atualizações de outros aparelhos são baixadas.
+4. Novas versões do sistema são instaladas automaticamente na próxima abertura com internet.
+
+Importante: envie os dados (abra o app com internet) antes de desinstalar o app ou limpar
+os dados do navegador — itens ainda na fila ficam só no aparelho.
