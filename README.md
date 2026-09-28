@@ -124,3 +124,22 @@ ordens de serviço, ensaios ou instrumentos pré-carregados. Só as normas técn
 
 Aparelhos que já tinham a versão anterior apagam os dados de demonstração guardados
 localmente na primeira abertura desta versão e passam a mostrar apenas o que está no banco.
+
+## Isolamento entre empresas (v6.3)
+
+- Cada aparelho baixa e guarda **somente** os dados da empresa do usuário logado.
+  Nada é baixado antes do login.
+- Ao entrar, dados de outras empresas que estivessem no aparelho são removidos.
+- O banco **recusa** as empresas/usuários de demonstração (`comp-jvm`, `comp-voltsafe`,
+  `comp-altatensao`, `usr-1`…), que só versões antigas do app ainda enviam.
+- A tela de login mostra **"Versão 6.3"** no rodapé: use para conferir se o site publicado
+  está atualizado.
+
+Descobrir quem está gravando no banco (aparelho e horário):
+```sql
+SELECT 'companies' AS tabela, id, name AS descricao, device_id, updated_at FROM public.companies
+UNION ALL SELECT 'users', id, email, device_id, updated_at FROM public.users
+UNION ALL SELECT 'clients', id, razao_social, device_id, updated_at FROM public.clients
+ORDER BY updated_at DESC LIMIT 50;
+```
+`device_id` vazio indica gravação feita por uma versão antiga do app.

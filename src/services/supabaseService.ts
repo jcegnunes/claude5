@@ -751,7 +751,10 @@ export class SupabaseService {
     }
 
     const client = this.getClient();
+    // Isolamento: só baixa dados da empresa do usuário logado (normas são globais)
+    const scope = DielectricStorageService.getSessionCompanyId();
     for (const table of PULL_TABLES) {
+      if (table !== 'norms' && !scope) continue;
       try {
         const cursor = opts.full ? null : DielectricStorageService.getPullCursor(table);
         const since = cursor ? new Date(new Date(cursor).getTime() - CURSOR_OVERLAP_MS).toISOString() : null;
@@ -768,6 +771,8 @@ export class SupabaseService {
             .order('id', { ascending: true })
             .range(from, from + pageSize - 1);
           if (since) query = query.gte('updated_at', since);
+          if (table === 'companies') query = query.eq('id', scope);
+          else if (table !== 'norms') query = query.eq('company_id', scope);
 
           const { data, error } = await query;
           if (error) {
@@ -819,6 +824,11 @@ export class SupabaseService {
   /** Converte e aplica as linhas recebidas no cache local. Retorna quantos registros mudaram. */
   private static applyRemoteRows(table: SyncTable, rows: any[], keepNewerLocal: boolean): number {
     const entityType = TABLE_ENTITY[table];
+    const scope = DielectricStorageService.getSessionCompanyId();
+    if (table !== 'norms') {
+      rows = rows.filter((r: any) => (table === 'companies' ? r.id : r.company_id) === scope);
+      if (rows.length === 0) return 0;
+    }
     let mapped: any[] = [];
     switch (table) {
       case 'companies': mapped = rows.map(rowToCompany); break;
@@ -925,7 +935,7 @@ export class SupabaseService {
       return out;
     }
 
-    const bootstrap = !DielectricStorageService.isBootstrapDone();
+    const bootstrap = !DielectricStorageService.isBootstrapDone() && !!DielectricStorageService.getSessionCompanyId();
     if (bootstrap) {
       const pull = await this.pullChanges({ full: true, keepNewerLocal: true });
       out.pull = pull;

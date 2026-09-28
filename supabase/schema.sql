@@ -844,6 +844,52 @@ $$;
 REVOKE ALL ON FUNCTION public.jvm_set_initial_password(TEXT, TEXT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.jvm_set_initial_password(TEXT, TEXT) TO anon, authenticated;
 
+
+-- =========================================================================
+-- BLOQUEIO DE DADOS DE DEMONSTRAÇÃO
+-- Versões antigas do app (prévia do AI Studio, sites/celulares desatualizados)
+-- reenviam as empresas de demonstração a cada abertura e "repovoam" o banco
+-- mesmo depois de zerado. Estas gravações passam a ser recusadas.
+-- =========================================================================
+CREATE OR REPLACE FUNCTION public.jvm_block_demo_data()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_company TEXT;
+BEGIN
+  IF TG_TABLE_NAME = 'companies' THEN
+    v_company := NEW.id;
+  ELSE
+    v_company := to_jsonb(NEW) ->> 'company_id';
+  END IF;
+
+  IF v_company IN ('comp-jvm', 'comp-voltsafe', 'comp-altatensao') THEN
+    RAISE EXCEPTION 'Dados de demonstração bloqueados (empresa %). Atualize o app para a versão mais recente.', v_company
+      USING ERRCODE = 'P0001';
+  END IF;
+
+  IF TG_TABLE_NAME = 'users'
+     AND NEW.id IN ('usr-master-admin-001', 'usr-1', 'usr-2', 'usr-3', 'usr-4', 'usr-5', 'usr-6') THEN
+    RAISE EXCEPTION 'Usuário de demonstração bloqueado (%). Atualize o app para a versão mais recente.', NEW.id
+      USING ERRCODE = 'P0001';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DO $$
+DECLARE
+  t TEXT;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['companies','users','clients','equipment','service_orders','test_records','lab_instruments','consolidated_reports','audit_logs']
+  LOOP
+    EXECUTE format('DROP TRIGGER IF EXISTS jvm_block_demo ON public.%I', t);
+    EXECUTE format('CREATE TRIGGER jvm_block_demo BEFORE INSERT OR UPDATE ON public.%I FOR EACH ROW EXECUTE FUNCTION public.jvm_block_demo_data()', t);
+  END LOOP;
+END $$;
+
 -- -------------------------------------------------------------------------
 -- DADOS INICIAIS: nenhum. O banco começa vazio.
 -- Crie o primeiro usuário com o comando abaixo (ajuste os dados) e, no

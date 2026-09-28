@@ -7,6 +7,8 @@
 -- As normas técnicas são mantidas (referência do sistema). Para apagá-las
 -- também, remova os dois traços do comando "DELETE FROM public.norms".
 --
+-- ANTES: feche/atualize TODAS as versões antigas do app (prévia do AI Studio,
+--        site antigo, celulares). Elas reenviam dados de demonstração.
 -- ANTES: faça um backup (Database > Backups, ou exporte as tabelas).
 -- DEPOIS: apague as fotos em Storage > jvm-evidencias (selecionar tudo > Delete).
 -- =========================================================================

@@ -1867,14 +1867,81 @@ export class DielectricStorageService {
   // ---------------------------------------------------------------------------
   // Cursores do pull incremental (updated_at do servidor por tabela)
   // ---------------------------------------------------------------------------
+  // Cursor por tabela E por empresa (trocar de usuário/empresa baixa tudo de novo)
   static getPullCursor(table: string): string | null {
-    return getLocal<Record<string, string>>(STORAGE_KEYS.PULL_CURSORS, {})[table] || null;
+    const key = `${table}@${this.getSessionCompanyId() || '-'}`;
+    return getLocal<Record<string, string>>(STORAGE_KEYS.PULL_CURSORS, {})[key] || null;
   }
 
   static setPullCursor(table: string, cursor: string): void {
+    const key = `${table}@${this.getSessionCompanyId() || '-'}`;
     const all = getLocal<Record<string, string>>(STORAGE_KEYS.PULL_CURSORS, {});
-    all[table] = cursor;
+    all[key] = cursor;
     setLocal(STORAGE_KEYS.PULL_CURSORS, all);
+  }
+
+  /**
+   * Empresa da sessão: a do usuário logado. Todo o download e o cache do
+   * aparelho ficam restritos a ela (isolamento entre empresas).
+   * Vazio = ninguém logado ou empresa ainda não cadastrada.
+   */
+  static getSessionCompanyId(): string {
+    const user = getLocal<User | null>(STORAGE_KEYS.CURRENT_USER, null);
+    return (user && user.id && user.companyId) ? user.companyId : '';
+  }
+
+  /**
+   * Remove do aparelho tudo que não pertence à empresa informada
+   * (dados de outras empresas baixados por versões anteriores).
+   * Registros com envio pendente da própria empresa são preservados.
+   */
+  static purgeOtherCompanies(companyId: string): number {
+    if (!companyId) return 0;
+    let removed = 0;
+    const keep = (item: any) => item && item.companyId === companyId;
+    [
+      STORAGE_KEYS.CLIENTS, STORAGE_KEYS.EQUIPMENT, STORAGE_KEYS.SERVICE_ORDERS,
+      STORAGE_KEYS.TESTS, STORAGE_KEYS.INSTRUMENTS, STORAGE_KEYS.REPORTS, STORAGE_KEYS.AUDIT
+    ].forEach(key => {
+      const list = getLocal<any[]>(key, []);
+      if (!Array.isArray(list)) return;
+      const filtered = list.filter(keep);
+      if (filtered.length !== list.length) {
+        removed += list.length - filtered.length;
+        setLocal(key, filtered);
+      }
+    });
+    const users = getLocal<User[]>(STORAGE_KEYS.USERS, []);
+    const sessionUserId = getLocal<User | null>(STORAGE_KEYS.CURRENT_USER, null)?.id;
+    const keptUsers = users.filter(u => u && (u.companyId === companyId || u.id === sessionUserId));
+    if (keptUsers.length !== users.length) {
+      removed += users.length - keptUsers.length;
+      setLocal(STORAGE_KEYS.USERS, keptUsers);
+    }
+    const comps = getLocal<Company[]>(STORAGE_KEYS.COMPANIES, []);
+    const keptComps = comps.filter(c => c && c.id === companyId);
+    if (keptComps.length !== comps.length) {
+      removed += comps.length - keptComps.length;
+      setLocal(STORAGE_KEYS.COMPANIES, keptComps);
+    }
+    const active = getLocal<Company | null>(STORAGE_KEYS.ACTIVE_COMPANY, null);
+    if (active && active.id !== companyId) {
+      const own = keptComps[0];
+      if (own) setLocal(STORAGE_KEYS.ACTIVE_COMPANY, own);
+      else localStorage.removeItem(STORAGE_KEYS.ACTIVE_COMPANY);
+    }
+    // Fila: descarta envios de registros de outras empresas
+    const queue = this.getSyncQueue().filter(q => {
+      if (q.entityType === 'norm') return true;
+      if (q.entityType === 'company' || q.entityType === 'company_info') return q.entityId === companyId;
+      const rec = q.entityType === 'audit'
+        ? getLocal<any[]>(STORAGE_KEYS.AUDIT, []).find(l => l.id === q.entityId)
+        : this.getLocalRecordForSync(q.entityType, q.entityId);
+      return !!rec;
+    });
+    setLocal(STORAGE_KEYS.SYNC_QUEUE, queue);
+    if (removed > 0) window.dispatchEvent(new Event('jvm-data-changed'));
+    return removed;
   }
 
   static resetPullCursors(): void {

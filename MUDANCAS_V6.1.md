@@ -79,3 +79,9 @@ Layout mantido. Mudanças apenas de texto/ação:
   como padrão; o painel mostra gráficos com os ensaios reais (antes havia números fictícios).
 - Aparelhos com a versão anterior apagam uma única vez os dados de demonstração locais.
 - Corrigida permissão do banco que impediria o app de atualizar o cadastro do usuário.
+
+## Isolamento entre empresas (v6.3)
+- Download restrito à empresa do usuário logado; nenhuma sincronização antes do login.
+- Limpeza automática, no aparelho, de dados de outras empresas.
+- Bloqueio no banco dos dados de demonstração reenviados por versões antigas.
+- Marcador "Versão 6.3" no rodapé da tela de login.

@@ -62,6 +62,16 @@ export default function App() {
     return EMPTY_USER;
   });
 
+  /**
+   * Sessão da empresa: remove do aparelho dados de outras empresas e inicia a
+   * sincronização (restrita à empresa do usuário) com o Supabase.
+   */
+  const startCompanySession = (companyId: string) => {
+    DielectricStorageService.purgeOtherCompanies(companyId);
+    SupabaseService.startAutoSync();
+    SupabaseService.syncNow().catch(() => {});
+  };
+
   // Primeiro acesso: o usuário sem empresa cadastrada vê a tela "Cadastre sua empresa".
   // null = verificando (consulta a empresa do usuário no banco, se preciso)
   const [needsCompanySetup, setNeedsCompanySetup] = useState<boolean | null>(null);
@@ -78,6 +88,7 @@ export default function App() {
       if (DielectricStorageService.getActiveCompany().id !== local.id) {
         DielectricStorageService.setActiveCompany(local);
       }
+      startCompanySession(local.id);
       setNeedsCompanySetup(false);
       return;
     }
@@ -89,6 +100,7 @@ export default function App() {
     SupabaseService.fetchCompanyById(companyId).then(found => {
       if (cancelled) return;
       setNeedsCompanySetup(!(found && found.cnpj));
+      if (found && found.cnpj) startCompanySession(found.id);
       if (found) setDataVersion(v => v + 1);
     });
     return () => { cancelled = true; };
@@ -137,9 +149,7 @@ export default function App() {
     // Sincronização automática com o Supabase (banco único): envio da fila
     // local, download incremental, Realtime e reenvio ao voltar a conexão.
     // Não roda no portal público de validação nem na câmera remota.
-    if (!isDirectValidation && !initialCamSession) {
-      SupabaseService.startAutoSync();
-    }
+    // (iniciada somente após o login, com a empresa do usuário definida)
 
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
@@ -312,6 +322,7 @@ export default function App() {
         onLogout={handleLogout}
         onComplete={(user) => {
           setCurrentUser(user);
+          if (user.companyId) startCompanySession(user.companyId);
           setNeedsCompanySetup(false);
           setActiveView('dashboard');
           setDataVersion(v => v + 1);
