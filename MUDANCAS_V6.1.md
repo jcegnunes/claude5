@@ -85,3 +85,17 @@ Layout mantido. Mudanças apenas de texto/ação:
 - Limpeza automática, no aparelho, de dados de outras empresas.
 - Bloqueio no banco dos dados de demonstração reenviados por versões antigas.
 - Marcador "Versão 6.3" no rodapé da tela de login.
+
+## Compatibilidade com tabelas de outros sistemas (v6.3.1)
+- Corrigido erro 23502 ("null value in column numero_os"): colunas extras obrigatórias
+  criadas por outros sistemas nas tabelas do app deixam de ser obrigatórias (sem apagar dados).
+- `numero_os` e `os_number` passam a ser mantidas iguais automaticamente.
+
+## Padronização das tabelas (v6.3.2)
+- Novo `supabase/padronizar_tabelas.sql`: remove colunas de outros sistemas das tabelas do app,
+  preservando antes número da OS e nome do cliente; lista (ou apaga, opcional) tabelas externas.
+- Removido do `schema.sql` o gatilho de compatibilidade com `numero_os`.
+
+## Recriação do banco (v6.3.3)
+- Novo `supabase/recriar_banco.sql`: apaga todas as tabelas/views/funções do schema public
+  e recria o banco inteiro no padrão do projeto, num único passo.

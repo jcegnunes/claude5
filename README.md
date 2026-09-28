@@ -143,3 +143,22 @@ UNION ALL SELECT 'clients', id, razao_social, device_id, updated_at FROM public.
 ORDER BY updated_at DESC LIMIT 50;
 ```
 `device_id` vazio indica gravação feita por uma versão antiga do app.
+
+## Padronizar tabelas criadas por outros sistemas — `supabase/padronizar_tabelas.sql`
+
+Se o projeto Supabase já tinha tabelas com colunas de outros sistemas (ex.: `numero_os`,
+`cliente_nome`), este script deixa **somente as colunas do padrão deste projeto**:
+
+1. Faça backup (Database → Backups).
+2. Execute `supabase/schema.sql` e depois `supabase/padronizar_tabelas.sql`.
+3. As mensagens mostram cada coluna removida. Número da OS e nome do cliente são copiados
+   antes para as colunas padrão; os demais dados das colunas extras são perdidos.
+
+Tabelas de outros sistemas são apenas listadas. Para apagá-las, troque
+`apagar_tabelas_extras := false` por `true` no bloco 4 do script.
+
+## Recriar o banco do zero — `supabase/recriar_banco.sql`  (recomendado)
+
+Apaga **todas** as tabelas do schema `public` (do app e de outros sistemas), com os dados,
+e cria tudo novo no padrão deste projeto. Depois, crie o primeiro usuário (seção
+"PRIMEIRO USUÁRIO" no final do script) e, no primeiro acesso ao app, cadastre a empresa.

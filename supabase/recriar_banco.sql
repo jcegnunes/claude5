@@ -1,4 +1,51 @@
 -- =========================================================================
+-- RECRIAR O BANCO DE DADOS DO ZERO   (APAGA TUDO - IRREVERSÍVEL)
+--
+-- 1. Apaga TODAS as tabelas do schema "public" (do app e de outros sistemas),
+--    com todos os dados, além das funções e gatilhos antigos.
+-- 2. Cria tudo novo no padrão deste projeto (mesmo conteúdo do schema.sql).
+-- 3. No final, crie o primeiro usuário (seção "PRIMEIRO USUÁRIO").
+--
+-- Antes de executar: feche/atualize todas as versões antigas do app.
+-- Fotos antigas: apague em Storage > jvm-evidencias (selecionar tudo > Delete).
+-- =========================================================================
+
+-- -------------------------------------------------------------------------
+-- PARTE 1 - APAGAR TUDO
+-- -------------------------------------------------------------------------
+DO $$
+DECLARE
+  r RECORD;
+BEGIN
+  -- Views
+  FOR r IN SELECT table_name FROM information_schema.views WHERE table_schema = 'public' LOOP
+    EXECUTE format('DROP VIEW IF EXISTS public.%I CASCADE', r.table_name);
+    RAISE NOTICE 'View apagada: %', r.table_name;
+  END LOOP;
+
+  -- Tabelas
+  FOR r IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' LOOP
+    EXECUTE format('DROP TABLE IF EXISTS public.%I CASCADE', r.tablename);
+    RAISE NOTICE 'Tabela apagada: %', r.tablename;
+  END LOOP;
+
+  -- Funções criadas no schema public (as de extensões são preservadas)
+  FOR r IN
+    SELECT p.oid::regprocedure::text AS assinatura
+      FROM pg_proc p
+      JOIN pg_namespace n ON n.oid = p.pronamespace
+     WHERE n.nspname = 'public'
+       AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = p.oid AND d.deptype = 'e')
+  LOOP
+    EXECUTE format('DROP FUNCTION IF EXISTS %s CASCADE', r.assinatura);
+    RAISE NOTICE 'Função apagada: %', r.assinatura;
+  END LOOP;
+END $$;
+
+-- -------------------------------------------------------------------------
+-- PARTE 2 - CRIAR TUDO NOVO (padrão deste projeto)
+-- -------------------------------------------------------------------------
+-- =========================================================================
 -- DIELECTRIC LAB - ESQUEMA SUPABASE (POSTGRESQL) - BANCO ÚNICO DA PLATAFORMA
 -- Projeto: cdtbzbshylrcprvmjpgc  |  https://cdtbzbshylrcprvmjpgc.supabase.co
 --
@@ -946,3 +993,19 @@ END $$;
 -- =========================================================================
 -- FIM DO SCRIPT
 -- =========================================================================
+
+-- -------------------------------------------------------------------------
+-- PARTE 3 - PRIMEIRO USUÁRIO
+-- Troque nome, e-mail, usuário e senha, REMOVA os dois traços do início das
+-- 3 linhas abaixo e execute somente elas (selecione e clique em Run).
+-- No primeiro acesso ao app, esse usuário cadastra a empresa.
+-- -------------------------------------------------------------------------
+-- INSERT INTO public.users (id, name, email, username, role, is_master_admin, password_hash)
+-- VALUES ('usr-admin', 'Seu Nome', 'voce@suaempresa.com.br', 'admin',
+--         'admin', true, 'SuaSenhaForte');
+
+-- Conferência: tabelas criadas
+SELECT table_name AS tabela_criada
+  FROM information_schema.tables
+ WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+ ORDER BY table_name;
