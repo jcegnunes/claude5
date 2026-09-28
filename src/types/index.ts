@@ -44,6 +44,8 @@ export interface User {
   cargo?: string;
   registrationNumber?: string;
   isMasterAdmin?: boolean;
+  /** Tem conta de acesso ao sistema (login). Técnicos só para assinatura não têm. */
+  hasLogin?: boolean;
   phone?: string;
   active?: boolean;
   avatarUrl?: string;

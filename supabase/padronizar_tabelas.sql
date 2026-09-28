@@ -89,6 +89,7 @@ INSERT INTO jvm_padrao VALUES
   ('users','updated_at','timestamp with time zone'),
   ('users','username','text'),
   ('users','auth_user_id','uuid'),
+  ('users','has_login','boolean'),
   ('clients','id','text'),
   ('clients','company_id','text'),
   ('clients','razao_social','text'),

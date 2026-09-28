@@ -46,7 +46,6 @@ import {
   auditToRow,
   USERS_SELECT_COLUMNS
 } from './supabaseMappers';
-import schemaSql from '../../supabase/schema.sql?raw';
 
 export interface SupabaseConfig {
   url: string;
@@ -1360,10 +1359,72 @@ export class SupabaseService {
   }
 
   // ===========================================================================
-  // SCRIPT SQL
+  // CADASTRO DE USUÁRIOS (administrador da empresa)
   // ===========================================================================
-  /** Script SQL oficial (idempotente) — mesma fonte de supabase/schema.sql. */
-  static generateSupabaseSchema(): string {
-    return schemaSql;
+  /** Mensagem amigável para erros das funções de administração de usuários. */
+  private static adminErrorMessage(error: any): string {
+    const msg = error?.message || '';
+    if (/fetch|network|Failed to|Load failed/i.test(msg)) {
+      return 'Sem conexão com a internet: cadastrar usuário com acesso ou definir senha exige internet.';
+    }
+    if (error?.code === 'PGRST202' || /Could not find the function/i.test(msg)) {
+      return 'Função ainda não instalada no banco. Execute o arquivo supabase/schema.sql no SQL Editor do Supabase.';
+    }
+    return msg || 'Não foi possível concluir a operação.';
+  }
+
+  /**
+   * Cadastra um usuário COM acesso ao sistema, vinculado à empresa do
+   * administrador logado. A senha é gravada (criptografada) pelo servidor.
+   */
+  static async adminCreateUser(data: {
+    name: string;
+    email: string;
+    username?: string;
+    role: User['role'];
+    password: string;
+    cargo?: string;
+    registration?: string;
+    phone?: string;
+  }): Promise<{ success: boolean; user?: User; error?: string }> {
+    if (!this.canSync()) return { success: false, error: this.adminErrorMessage({ message: 'network' }) };
+    if (!(await this.getSession())) return { success: false, error: SESSION_EXPIRED_MESSAGE };
+    const { data: res, error } = await this.getClient().rpc('jvm_admin_create_user', {
+      p_name: data.name,
+      p_email: data.email,
+      p_username: data.username || null,
+      p_role: data.role,
+      p_password: data.password,
+      p_cargo: data.cargo || null,
+      p_registration: data.registration || null,
+      p_phone: data.phone || null
+    });
+    if (error) return { success: false, error: this.adminErrorMessage(error) };
+    const payload: any = typeof res === 'string' ? JSON.parse(res) : res;
+    if (!payload?.user) return { success: false, error: 'Resposta inválida do servidor.' };
+    const user = rowToUser(payload.user);
+    DielectricStorageService.saveFromRemote('users', [user]);
+    return { success: true, user };
+  }
+
+  /**
+   * Define ou troca a senha de um usuário da empresa. Para um técnico
+   * cadastrado sem acesso, informe o e-mail (e, se quiser, o nome de usuário).
+   */
+  static async adminSetPassword(userId: string, password: string, email?: string, username?: string): Promise<{ success: boolean; user?: User; error?: string }> {
+    if (!this.canSync()) return { success: false, error: this.adminErrorMessage({ message: 'network' }) };
+    if (!(await this.getSession())) return { success: false, error: SESSION_EXPIRED_MESSAGE };
+    const { data: res, error } = await this.getClient().rpc('jvm_admin_set_password', {
+      p_user_id: userId,
+      p_password: password,
+      p_email: email || null,
+      p_username: username || null
+    });
+    if (error) return { success: false, error: this.adminErrorMessage(error) };
+    const payload: any = typeof res === 'string' ? JSON.parse(res) : res;
+    if (!payload?.user) return { success: false, error: 'Resposta inválida do servidor.' };
+    const user = rowToUser(payload.user);
+    DielectricStorageService.saveFromRemote('users', [user]);
+    return { success: true, user };
   }
 }

@@ -975,7 +975,10 @@ SECURITY DEFINER
 SET search_path = public, extensions
 AS $$
 DECLARE
-  v_from_api BOOLEAN := COALESCE(auth.role(), '') IN ('anon', 'authenticated');
+  -- Gravação vinda do app: só bloqueio/e-mail de contas já vinculadas. As funções
+  -- de administração (jvm_admin_*) liberam a criação com jvm.trusted_auth_sync.
+  v_from_api BOOLEAN := COALESCE(auth.role(), '') IN ('anon', 'authenticated')
+                        AND COALESCE(current_setting('jvm.trusted_auth_sync', true), '') <> 'on';
   v_email TEXT := lower(trim(COALESCE(NEW.email, '')));
   v_uid UUID := NEW.auth_user_id;
   v_has_pwd BOOLEAN := COALESCE(NEW.password_hash ~ '^\$2[aby]\$', false);
@@ -1063,6 +1066,161 @@ UPDATE public.users
  WHERE auth_user_id IS NULL
    AND deleted_at IS NULL
    AND password_hash ~ '^\$2[aby]\$';
+
+-- -------------------------------------------------------------------------
+-- CADASTRO DE USUÁRIOS PELO APP (somente administrador da empresa)
+-- O usuário criado fica SEMPRE vinculado à empresa de quem cadastra.
+-- A senha é gravada pelo servidor (criptografada) e a conta de login é
+-- criada na hora. Técnicos sem acesso ao sistema continuam sendo cadastrados
+-- normalmente pelo app (sem senha) e podem receber acesso depois.
+-- -------------------------------------------------------------------------
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS has_login BOOLEAN
+  GENERATED ALWAYS AS (auth_user_id IS NOT NULL) STORED;
+
+CREATE OR REPLACE FUNCTION public.jvm_validate_new_password(p_password TEXT)
+RETURNS VOID
+LANGUAGE plpgsql IMMUTABLE
+AS $$
+BEGIN
+  IF p_password IS NULL OR length(p_password) < 8 THEN
+    RAISE EXCEPTION 'A senha deve ter pelo menos 8 caracteres.' USING ERRCODE = '22023';
+  END IF;
+  IF p_password !~ '[A-Za-z]' OR p_password !~ '[0-9]' THEN
+    RAISE EXCEPTION 'A senha deve ter letras e números.' USING ERRCODE = '22023';
+  END IF;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.jvm_admin_create_user(
+  p_name TEXT,
+  p_email TEXT,
+  p_username TEXT,
+  p_role TEXT,
+  p_password TEXT,
+  p_cargo TEXT DEFAULT NULL,
+  p_registration TEXT DEFAULT NULL,
+  p_phone TEXT DEFAULT NULL
+)
+RETURNS JSON
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_company TEXT := public.jvm_my_company();
+  v_company_name TEXT;
+  v_email TEXT := lower(trim(COALESCE(p_email, '')));
+  v_username TEXT := NULLIF(lower(trim(COALESCE(p_username, ''))), '');
+  v_id TEXT := 'usr-' || substr(replace(gen_random_uuid()::text, '-', ''), 1, 16);
+  u public.users%ROWTYPE;
+BEGIN
+  IF v_company IS NULL OR NOT public.jvm_is_admin() THEN
+    RAISE EXCEPTION 'Somente o administrador da empresa pode cadastrar usuários com acesso.' USING ERRCODE = '42501';
+  END IF;
+  IF trim(COALESCE(p_name, '')) = '' THEN
+    RAISE EXCEPTION 'Informe o nome do usuário.' USING ERRCODE = '22023';
+  END IF;
+  IF v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' OR v_email LIKE '%@sem-email.local' THEN
+    RAISE EXCEPTION 'Informe um e-mail válido (ele será usado no login).' USING ERRCODE = '22023';
+  END IF;
+  IF v_username IS NOT NULL AND v_username !~ '^[a-z0-9._-]{3,40}$' THEN
+    RAISE EXCEPTION 'Nome de usuário inválido: use de 3 a 40 letras, números, ponto, hífen ou sublinhado.' USING ERRCODE = '22023';
+  END IF;
+  IF p_role NOT IN ('admin', 'responsavel_tecnico', 'tecnico', 'administrativo', 'cliente') THEN
+    RAISE EXCEPTION 'Perfil inválido: %', p_role USING ERRCODE = '22023';
+  END IF;
+  PERFORM public.jvm_validate_new_password(p_password);
+  IF EXISTS (SELECT 1 FROM public.users WHERE lower(email) = v_email) THEN
+    RAISE EXCEPTION 'Já existe um usuário com este e-mail.' USING ERRCODE = '23505';
+  END IF;
+  IF v_username IS NOT NULL AND EXISTS (SELECT 1 FROM public.users WHERE lower(username) = v_username) THEN
+    RAISE EXCEPTION 'Este nome de usuário já está em uso.' USING ERRCODE = '23505';
+  END IF;
+
+  SELECT name INTO v_company_name FROM public.companies WHERE id = v_company;
+
+  -- libera a criação da conta de login nesta transação (ver jvm_sync_auth_user)
+  PERFORM set_config('jvm.trusted_auth_sync', 'on', true);
+  INSERT INTO public.users (id, company_id, company_name, name, email, username, role, cargo,
+                            registration_number, crea_or_cft, phone, active, is_master_admin, password_hash)
+  VALUES (v_id, v_company, v_company_name, trim(p_name), v_email, v_username, p_role, NULLIF(trim(p_cargo), ''),
+          NULLIF(trim(p_registration), ''), NULLIF(trim(p_registration), ''), NULLIF(trim(p_phone), ''),
+          true, false, p_password)
+  RETURNING * INTO u;
+  PERFORM set_config('jvm.trusted_auth_sync', 'off', true);
+
+  RETURN json_build_object('ok', true, 'user', to_jsonb(u) - 'password_hash' - 'auth_user_id');
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.jvm_admin_create_user(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.jvm_admin_create_user(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT) TO authenticated;
+
+-- Define/troca a senha de um usuário da empresa. Dá acesso ao sistema a um
+-- técnico cadastrado sem senha (informando e-mail e, se quiser, usuário).
+CREATE OR REPLACE FUNCTION public.jvm_admin_set_password(
+  p_user_id TEXT,
+  p_password TEXT,
+  p_email TEXT DEFAULT NULL,
+  p_username TEXT DEFAULT NULL
+)
+RETURNS JSON
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_company TEXT := public.jvm_my_company();
+  v_master BOOLEAN := public.jvm_is_master();
+  v_email TEXT := NULLIF(lower(trim(COALESCE(p_email, ''))), '');
+  v_username TEXT := NULLIF(lower(trim(COALESCE(p_username, ''))), '');
+  t public.users%ROWTYPE;
+  u public.users%ROWTYPE;
+BEGIN
+  IF v_company IS NULL OR NOT public.jvm_is_admin() THEN
+    RAISE EXCEPTION 'Somente o administrador da empresa pode definir senhas.' USING ERRCODE = '42501';
+  END IF;
+  SELECT * INTO t FROM public.users WHERE id = p_user_id AND deleted_at IS NULL;
+  IF NOT FOUND OR (t.company_id IS DISTINCT FROM v_company AND NOT v_master) THEN
+    RAISE EXCEPTION 'Usuário não encontrado nesta empresa.' USING ERRCODE = '42501';
+  END IF;
+  IF t.is_master_admin AND NOT v_master THEN
+    RAISE EXCEPTION 'A senha do administrador da plataforma só pode ser alterada por ele.' USING ERRCODE = '42501';
+  END IF;
+  PERFORM public.jvm_validate_new_password(p_password);
+
+  v_email := COALESCE(v_email, lower(t.email));
+  IF v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' OR v_email LIKE '%@sem-email.local' THEN
+    RAISE EXCEPTION 'Informe um e-mail válido para o login deste usuário.' USING ERRCODE = '22023';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.users WHERE lower(email) = v_email AND id <> t.id) THEN
+    RAISE EXCEPTION 'Já existe um usuário com este e-mail.' USING ERRCODE = '23505';
+  END IF;
+  IF v_username IS NOT NULL THEN
+    IF v_username !~ '^[a-z0-9._-]{3,40}$' THEN
+      RAISE EXCEPTION 'Nome de usuário inválido: use de 3 a 40 letras, números, ponto, hífen ou sublinhado.' USING ERRCODE = '22023';
+    END IF;
+    IF EXISTS (SELECT 1 FROM public.users WHERE lower(username) = v_username AND id <> t.id) THEN
+      RAISE EXCEPTION 'Este nome de usuário já está em uso.' USING ERRCODE = '23505';
+    END IF;
+  END IF;
+
+  PERFORM set_config('jvm.trusted_auth_sync', 'on', true);
+  UPDATE public.users
+     SET password_hash = p_password,
+         email = v_email,
+         username = COALESCE(v_username, username),
+         active = true
+   WHERE id = t.id
+  RETURNING * INTO u;
+  PERFORM set_config('jvm.trusted_auth_sync', 'off', true);
+
+  RETURN json_build_object('ok', true, 'user', to_jsonb(u) - 'password_hash' - 'auth_user_id');
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.jvm_admin_set_password(TEXT, TEXT, TEXT, TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.jvm_admin_set_password(TEXT, TEXT, TEXT, TEXT) TO authenticated;
 
 -- -------------------------------------------------------------------------
 -- Funções chamadas pelo app
@@ -1377,7 +1535,7 @@ GRANT SELECT (
   id, company_id, company_name, name, email, username, role, cargo,
   registration_number, crea_or_cft, phone, active, is_master_admin,
   signature_url, custom_settings, payload, device_id, deleted_at,
-  created_at, updated_at
+  created_at, updated_at, has_login
 ) ON public.users TO authenticated;
 GRANT INSERT (
   id, company_id, company_name, name, email, username, role, cargo,

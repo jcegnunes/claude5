@@ -1,17 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  RefreshCw, 
-  Wifi, 
-  WifiOff, 
-  Database, 
-  Clock, 
-  CheckCircle2, 
-  AlertTriangle, 
-  Server, 
-  Smartphone, 
-  Layers, 
-  GitMerge, 
-  Trash2, 
+import {
+  RefreshCw,
+  Wifi,
+  WifiOff,
+  Database,
+  Clock,
+  CheckCircle2,
+  AlertTriangle,
+  Server,
+  Smartphone,
+  Layers,
+  GitMerge,
+  Trash2,
   Send,
   HardDrive,
   Globe,
@@ -30,7 +30,6 @@ import {
 import { DielectricStorageService, SyncQueueItem, getDeviceId } from '../services/syncEngine';
 import { ValidationPortalService, DEFAULT_VALIDATION_BASE_URL, PortalConnectionResult } from '../services/validationPortalService';
 import { SupabaseService, SupabaseConnectionResult } from '../services/supabaseService';
-import { SupabaseDatabaseModal } from '../components/SupabaseDatabaseModal';
 import { CompleteBackupModal } from '../components/CompleteBackupModal';
 import { ConflictsPanel } from '../components/ConflictsPanel';
 import { FolderArchive } from 'lucide-react';
@@ -53,7 +52,7 @@ export const SyncManagerView: React.FC<SyncManagerViewProps> = ({
   const [syncLogs, setSyncLogs] = useState<string[]>([
     'Iniciando verificação de integridade local...',
     'Cache offline do aparelho operacional (fila de envio ativa).',
-    `Banco de dados Supabase configurado: ${SupabaseService.getConfig().url}`,
+    'Conexão com a nuvem da plataforma configurada.',
     'Sincronização bidirecional ativa (envio automático + Realtime).'
   ]);
 
@@ -67,7 +66,6 @@ export const SyncManagerView: React.FC<SyncManagerViewProps> = ({
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string>('');
 
   // Supabase Connection State
-  const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState<boolean>(false);
   const [isTestingSupabase, setIsTestingSupabase] = useState<boolean>(false);
   const [isSyncingSupabase, setIsSyncingSupabase] = useState<boolean>(false);
   const [isPullingSupabase, setIsPullingSupabase] = useState<boolean>(false);
@@ -103,14 +101,14 @@ export const SyncManagerView: React.FC<SyncManagerViewProps> = ({
       setSupabaseStatus(res);
       setSyncLogs(prev => [
         ...prev,
-        `[${new Date().toLocaleTimeString()}] Ping Supabase (${res.url.replace('https://', '')}): ${res.success ? `Ativo (${res.latencyMs}ms)` : `Aviso (${res.message})`}`
+        `[${new Date().toLocaleTimeString()}] Conexão com a nuvem: ${res.success ? `Ativa (${res.latencyMs}ms)` : 'Indisponível no momento'}`
       ]);
     } catch (err: any) {
       setSupabaseStatus({
         success: false,
         latencyMs: 0,
         url: SupabaseService.getConfig().url,
-        message: err.message || 'Falha ao conectar ao Supabase',
+        message: err.message || 'Falha ao conectar à nuvem',
         isReady: false
       });
     } finally {
@@ -124,20 +122,20 @@ export const SyncManagerView: React.FC<SyncManagerViewProps> = ({
       return;
     }
     setIsSyncingSupabase(true);
-    setSyncLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] Reenviando a base local completa ao Supabase (fotos para o Storage)...`]);
+    setSyncLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] Reenviando a base local completa à nuvem (com fotos)...`]);
 
     try {
       const stats = await SupabaseService.syncAllToSupabase();
       if (stats.errors.length === 0) {
         setSyncLogs(prev => [
           ...prev,
-          `[${new Date().toLocaleTimeString()}] SUPABASE OK: ${stats.companiesUploaded || 0} empresas, ${stats.usersUploaded || 0} usuários, ${stats.clientsUploaded} clientes, ${stats.equipmentUploaded} EPIs, ${stats.ordersUploaded} OS, ${stats.testsUploaded} laudos e ${stats.instrumentsUploaded} instrumentos sincronizados.`
+          `[${new Date().toLocaleTimeString()}] ENVIO OK: ${stats.companiesUploaded || 0} empresas, ${stats.usersUploaded || 0} usuários, ${stats.clientsUploaded} clientes, ${stats.equipmentUploaded} EPIs, ${stats.ordersUploaded} OS, ${stats.testsUploaded} laudos e ${stats.instrumentsUploaded} instrumentos sincronizados.`
         ]);
-        setSaveSuccessMsg(`Supabase: ${stats.companiesUploaded || 0} empresas, ${stats.clientsUploaded} clientes, ${stats.equipmentUploaded} EPIs, ${stats.ordersUploaded} OS e ${stats.testsUploaded} laudos enviados com sucesso!`);
+        setSaveSuccessMsg(`Nuvem: ${stats.companiesUploaded || 0} empresas, ${stats.clientsUploaded} clientes, ${stats.equipmentUploaded} EPIs, ${stats.ordersUploaded} OS e ${stats.testsUploaded} laudos enviados com sucesso!`);
       } else {
         setSyncLogs(prev => [
           ...prev,
-          `[${new Date().toLocaleTimeString()}] SUPABASE: ${stats.companiesUploaded + stats.usersUploaded + stats.clientsUploaded + stats.equipmentUploaded + stats.ordersUploaded + stats.testsUploaded + stats.instrumentsUploaded} registros enviados. Avisos: ${stats.errors.join(' | ')}`
+          `[${new Date().toLocaleTimeString()}] ENVIO: ${stats.companiesUploaded + stats.usersUploaded + stats.clientsUploaded + stats.equipmentUploaded + stats.ordersUploaded + stats.testsUploaded + stats.instrumentsUploaded} registros enviados. Avisos: ${stats.errors.join(' | ')}`
         ]);
         setSaveSuccessMsg(`Sincronização realizada (${stats.equipmentUploaded} EPIs, ${stats.testsUploaded} laudos). Alguns registros reportaram avisos.`);
       }
@@ -145,7 +143,7 @@ export const SyncManagerView: React.FC<SyncManagerViewProps> = ({
       loadData();
       testSupabaseConn();
     } catch (err: any) {
-      setSyncLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] Erro no sync Supabase: ${err.message || err}`]);
+      setSyncLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] Erro na sincronização: ${err.message || err}`]);
     } finally {
       setIsSyncingSupabase(false);
     }
@@ -157,27 +155,27 @@ export const SyncManagerView: React.FC<SyncManagerViewProps> = ({
       return;
     }
     setIsPullingSupabase(true);
-    setSyncLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] Baixando dados atualizados do Supabase Cloud (Empresas, Usuários, Clientes, EPIs, OS, Ensaios)...`]);
+    setSyncLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] Baixando dados atualizados da nuvem (Empresas, Usuários, Clientes, EPIs, OS, Ensaios)...`]);
 
     try {
       const stats = await SupabaseService.pullFromSupabase({ full: true });
       if (stats.errors.length === 0) {
         setSyncLogs(prev => [
           ...prev,
-          `[${new Date().toLocaleTimeString()}] SUPABASE PULL OK: ${stats.totalPulled} registros obtidos (${stats.pulledCompanies} empresas, ${stats.pulledUsers} usuários, ${stats.pulledClients} clientes, ${stats.pulledEquipment} EPIs, ${stats.pulledServiceOrders} OS, ${stats.pulledTests} laudos, ${stats.pulledInstruments} instrumentos).`
+          `[${new Date().toLocaleTimeString()}] DOWNLOAD OK: ${stats.totalPulled} registros obtidos (${stats.pulledCompanies} empresas, ${stats.pulledUsers} usuários, ${stats.pulledClients} clientes, ${stats.pulledEquipment} EPIs, ${stats.pulledServiceOrders} OS, ${stats.pulledTests} laudos, ${stats.pulledInstruments} instrumentos).`
         ]);
-        setSaveSuccessMsg(`Plataforma atualizada com sucesso: ${stats.totalPulled} registros sincronizados do Supabase!`);
+        setSaveSuccessMsg(`Plataforma atualizada com sucesso: ${stats.totalPulled} registros sincronizados da nuvem!`);
       } else {
         setSyncLogs(prev => [
           ...prev,
-          `[${new Date().toLocaleTimeString()}] SUPABASE PULL: ${stats.totalPulled} registros obtidos com avisos: ${stats.errors.join(' | ')}`
+          `[${new Date().toLocaleTimeString()}] DOWNLOAD: ${stats.totalPulled} registros obtidos com avisos: ${stats.errors.join(' | ')}`
         ]);
-        setSaveSuccessMsg(`Plataforma atualizada: ${stats.totalPulled} registros obtidos do Supabase.`);
+        setSaveSuccessMsg(`Plataforma atualizada: ${stats.totalPulled} registros obtidos da nuvem.`);
       }
       setTimeout(() => setSaveSuccessMsg(''), 5000);
       loadData();
     } catch (err: any) {
-      setSyncLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] Erro no download do Supabase: ${err.message || err}`]);
+      setSyncLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] Erro no download: ${err.message || err}`]);
     } finally {
       setIsPullingSupabase(false);
     }
@@ -204,7 +202,7 @@ export const SyncManagerView: React.FC<SyncManagerViewProps> = ({
       return;
     }
     setIsSyncingCloud(true);
-    setSyncLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] Iniciando sincronização (${mode.toUpperCase()}) com o Supabase...`]);
+    setSyncLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] Iniciando sincronização (${mode.toUpperCase()}) com a nuvem...`]);
 
     try {
       if (mode === 'push') {
@@ -215,7 +213,7 @@ export const SyncManagerView: React.FC<SyncManagerViewProps> = ({
         setSyncLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] PULL: ${res.totalPulled} registro(s) recebido(s) (${res.pulledTests} ensaios, ${res.pulledEquipment} EPIs, ${res.pulledServiceOrders} OS).${res.errors.length ? ' Avisos: ' + res.errors.slice(0, 2).join(' | ') : ''}`]);
       } else {
         await onManualSync();
-        setSyncLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] SYNC TOTAL concluído com o Supabase.`]);
+        setSyncLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] SYNC TOTAL concluído.`]);
       }
 
       loadData();
@@ -241,7 +239,7 @@ export const SyncManagerView: React.FC<SyncManagerViewProps> = ({
   };
 
   const handleClearQueue = () => {
-    if (!window.confirm('Limpar a fila descarta o envio dos registros pendentes ao Supabase. Deseja continuar?')) return;
+    if (!window.confirm('Limpar a fila descarta o envio dos registros pendentes à nuvem. Deseja continuar?')) return;
     DielectricStorageService.clearSyncQueue();
     loadData();
     setSyncLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] Fila de sincronização zerada manualmente.`]);
@@ -253,14 +251,13 @@ export const SyncManagerView: React.FC<SyncManagerViewProps> = ({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `jvm-supabase-sync-export-${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `jvm-sync-export-${new Date().toISOString().split('T')[0]}.json`;
     a.click();
     URL.revokeObjectURL(url);
     setSyncLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] Pacote JSON completo exportado.`]);
   };
 
   const portalHost = portalUrl.replace(/^https?:\/\//, '').replace(/\/+$/, '');
-  const supabaseHost = SupabaseService.getConfig().url.replace(/^https?:\/\//, '');
 
   const tests = DielectricStorageService.getTests();
   const equipment = DielectricStorageService.getEquipment();
@@ -273,13 +270,13 @@ export const SyncManagerView: React.FC<SyncManagerViewProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-xl font-bold text-slate-900">Central de Sincronização & Nuvem Supabase</h2>
+            <h2 className="text-xl font-bold text-slate-900">Central de Sincronização</h2>
             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-              <Globe className="w-3 h-3 text-blue-600" /> Supabase Ativo
+              <Globe className="w-3 h-3 text-blue-600" /> Nuvem ativa
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            Sincronização bidirecional em tempo real entre o app móvel/desktop e o banco de dados central Supabase.
+            Sincronização bidirecional em tempo real entre o app móvel/desktop e a nuvem da plataforma.
           </p>
         </div>
 
@@ -294,14 +291,6 @@ export const SyncManagerView: React.FC<SyncManagerViewProps> = ({
           >
             {isOnline ? <Wifi className="w-4 h-4 text-emerald-600" /> : <WifiOff className="w-4 h-4 text-red-600" />}
             {isOnline ? 'Online (Conectado)' : 'Offline (Simulado)'}
-          </button>
-
-          <button
-            onClick={() => setIsSupabaseModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
-          >
-            <Database className="w-3.5 h-3.5" />
-            <span>Supabase Cloud (PostgreSQL)</span>
           </button>
 
           <button
@@ -327,7 +316,7 @@ export const SyncManagerView: React.FC<SyncManagerViewProps> = ({
             className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm transition-colors disabled:opacity-50"
           >
             <RefreshCw className={`w-4 h-4 ${(isSyncing || isSyncingCloud) ? 'animate-spin' : ''}`} />
-            {isSyncing || isSyncingCloud ? 'Sincronizando...' : 'Sincronizar com Supabase'}
+            {isSyncing || isSyncingCloud ? 'Sincronizando...' : 'Sincronizar'}
           </button>
         </div>
       </div>
@@ -339,39 +328,26 @@ export const SyncManagerView: React.FC<SyncManagerViewProps> = ({
         </div>
       )}
 
-      {/* Supabase Cloud Database Hero Card */}
-      <div className="bg-gradient-to-r from-slate-900 via-teal-950 to-slate-900 text-white rounded-2xl p-6 shadow-md border border-emerald-500/30 grid grid-cols-1 lg:grid-cols-3 gap-6 items-center">
+      {/* Nuvem da plataforma */}
+      <div className="bg-gradient-to-r from-slate-900 via-teal-950 to-slate-900 text-white rounded-2xl p-6 shadow-md border border-emerald-500/30 grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
         {/* Left: Project Info */}
         <div className="flex items-center gap-3.5">
           <div className="w-12 h-12 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center font-bold shrink-0 shadow-inner">
             <Database className="w-6 h-6" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] uppercase font-bold text-emerald-400 tracking-wider">Banco de Dados Cloud</span>
-              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                Supabase
-              </span>
-            </div>
-            <h4 className="font-bold text-sm text-slate-100">PostgreSQL JVM Dielectric Lab</h4>
-            <a 
-              href={SupabaseService.getConfig().url} 
-              target="_blank" 
-              rel="noopener noreferrer" 
-              className="text-[11px] text-emerald-400 hover:text-emerald-300 font-mono flex items-center gap-1 mt-0.5"
-            >
-              <span>{supabaseHost}</span>
-              <ExternalLink className="w-3 h-3 shrink-0" />
-            </a>
+            <span className="text-[10px] uppercase font-bold text-emerald-400 tracking-wider">Nuvem da Plataforma</span>
+            <h4 className="font-bold text-sm text-slate-100">Dados da empresa sincronizados</h4>
+            <p className="text-[11px] text-slate-400 mt-0.5">Ensaios, EPIs, clientes e OS disponíveis em todos os aparelhos</p>
           </div>
         </div>
 
         {/* Center: Real-time Status & Ping */}
-        <div className="flex flex-col items-center justify-center text-center py-2 lg:border-x border-slate-800 px-4">
+        <div className="flex flex-col items-center justify-center text-center py-2 lg:border-l border-slate-800 px-4">
           <div className="flex items-center gap-2">
             <span className={`w-2.5 h-2.5 rounded-full ${supabaseStatus?.success ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-amber-400'}`} />
             <span className="text-xs font-bold text-slate-100">
-              {supabaseStatus?.success ? 'Conexão Supabase Ativa' : 'Supabase Configurado'}
+              {supabaseStatus?.success ? 'Conexão com a nuvem ativa' : 'Verificando conexão'}
             </span>
             {supabaseStatus?.latencyMs ? (
               <span className="text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded border border-emerald-500/30">
@@ -380,7 +356,7 @@ export const SyncManagerView: React.FC<SyncManagerViewProps> = ({
             ) : null}
           </div>
           <p className="text-[11px] text-slate-400 mt-1">
-            {supabaseStatus?.message || 'Pronto para sincronização bidirecional'}
+            {supabaseStatus && !supabaseStatus.success ? 'Sem conexão com a nuvem no momento' : 'Pronto para sincronização bidirecional'}
           </p>
 
           <div className="flex items-center gap-2 mt-3 flex-wrap justify-center">
@@ -388,7 +364,7 @@ export const SyncManagerView: React.FC<SyncManagerViewProps> = ({
               onClick={() => handlePullSupabase()}
               disabled={isPullingSupabase || isSyncingSupabase}
               className="px-2.5 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-bold border border-teal-500 flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
-              title="Baixar dados do banco Supabase e atualizar a plataforma"
+              title="Baixar os dados da nuvem e atualizar este aparelho"
             >
               <ArrowDownLeft className={`w-3.5 h-3.5 ${isPullingSupabase ? 'animate-bounce' : ''}`} />
               <span>{isPullingSupabase ? 'Baixando...' : 'Baixar (Pull)'}</span>
@@ -397,7 +373,7 @@ export const SyncManagerView: React.FC<SyncManagerViewProps> = ({
               onClick={() => handleSyncSupabase()}
               disabled={isSyncingSupabase || isPullingSupabase}
               className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold border border-emerald-500 flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
-              title="Enviar dados locais para o banco Supabase"
+              title="Enviar os dados deste aparelho para a nuvem"
             >
               <UploadCloud className={`w-3.5 h-3.5 ${isSyncingSupabase ? 'animate-bounce' : ''}`} />
               <span>{isSyncingSupabase ? 'Enviando...' : 'Enviar (Push)'}</span>
@@ -412,26 +388,9 @@ export const SyncManagerView: React.FC<SyncManagerViewProps> = ({
             </button>
           </div>
         </div>
-
-        {/* Right: SQL & Management */}
-        <div className="flex items-center gap-3.5 justify-start lg:justify-end">
-          <div className="text-left lg:text-right space-y-1">
-            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">DDL & Tabelas PostgreSQL</span>
-            <div className="text-xs text-slate-300">
-              clients • equipment • test_records • service_orders • norms
-            </div>
-            <button
-              onClick={() => setIsSupabaseModalOpen(true)}
-              className="inline-flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 font-bold bg-emerald-950/60 hover:bg-emerald-900/80 px-3 py-1.5 rounded-lg border border-emerald-500/30 transition-all cursor-pointer mt-1"
-            >
-              <Database className="w-3.5 h-3.5" />
-              <span>Abrir Gerenciador & Script SQL</span>
-            </button>
-          </div>
-        </div>
       </div>
 
-      {/* Topologia: Aparelho -> Supabase -> Portal Público */}
+      {/* Topologia: Aparelho -> Nuvem -> Portal Público */}
       <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-md border border-slate-800 grid grid-cols-1 lg:grid-cols-3 gap-6 items-center">
         {/* Left: Device Info */}
         <div className="flex items-center gap-3.5">
@@ -464,7 +423,7 @@ export const SyncManagerView: React.FC<SyncManagerViewProps> = ({
               onClick={() => handleSyncCloud('push')}
               disabled={isSyncingCloud}
               className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-blue-300 rounded-lg text-[10px] font-bold border border-slate-700 flex items-center gap-1 transition-colors"
-              title="Enviar a fila local para o Supabase"
+              title="Enviar a fila local para a nuvem"
             >
               <ArrowUpRight className="w-3 h-3 text-blue-400" /> Enviar (Push)
             </button>
@@ -472,7 +431,7 @@ export const SyncManagerView: React.FC<SyncManagerViewProps> = ({
               onClick={() => handleSyncCloud('pull')}
               disabled={isSyncingCloud}
               className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-emerald-300 rounded-lg text-[10px] font-bold border border-slate-700 flex items-center gap-1 transition-colors"
-              title="Receber novos registros do Supabase"
+              title="Receber novos registros da nuvem"
             >
               <ArrowDownLeft className="w-3 h-3 text-emerald-400" /> Baixar (Pull)
             </button>
@@ -487,10 +446,10 @@ export const SyncManagerView: React.FC<SyncManagerViewProps> = ({
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             </div>
             <h4 className="font-bold text-sm text-slate-100">Validação de Laudos</h4>
-            <a 
-              href={portalUrl} 
-              target="_blank" 
-              rel="noopener noreferrer" 
+            <a
+              href={portalUrl}
+              target="_blank"
+              rel="noopener noreferrer"
               className="text-[11px] text-blue-400 hover:text-blue-300 font-mono flex items-center gap-1 justify-start lg:justify-end break-all"
             >
               <span>{portalHost}</span>
@@ -562,7 +521,7 @@ export const SyncManagerView: React.FC<SyncManagerViewProps> = ({
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div>
                 <h3 className="font-bold text-slate-900 text-sm">Fila de Mutações Locais ({queue.length})</h3>
-                <p className="text-xs text-slate-500">Alterações realizadas em campo aguardando envio ao Supabase</p>
+                <p className="text-xs text-slate-500">Alterações realizadas em campo aguardando envio à nuvem</p>
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -623,7 +582,6 @@ export const SyncManagerView: React.FC<SyncManagerViewProps> = ({
               <Shield className="w-3.5 h-3.5 text-emerald-600" />
               Criptografia e integridade SHA-256
             </span>
-            <span className="font-mono text-[11px]">{supabaseHost}</span>
           </div>
         </div>
 
@@ -633,7 +591,7 @@ export const SyncManagerView: React.FC<SyncManagerViewProps> = ({
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2">
                 <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                  Console de Sincronização Supabase
+                  Console de Sincronização
                 </span>
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
               </div>
@@ -643,7 +601,7 @@ export const SyncManagerView: React.FC<SyncManagerViewProps> = ({
             <div className="mt-3 space-y-1.5 max-h-72 overflow-y-auto text-[11px]">
               {syncLogs.map((log, index) => (
                 <div key={index} className="text-slate-300 flex items-start gap-1.5">
-                  <span className="text-blue-400 select-none">supabase-sync&gt;</span> 
+                  <span className="text-blue-400 select-none">sync&gt;</span>
                   <span className="break-all">{log}</span>
                 </div>
               ))}
@@ -652,7 +610,6 @@ export const SyncManagerView: React.FC<SyncManagerViewProps> = ({
 
           <div className="pt-3 mt-3 border-t border-slate-800 flex items-center justify-between text-[10px] text-slate-500">
             <span>Status API: {supabaseStatus?.success ? '🟢 Conectado' : '🟡 Verificando'}</span>
-            <span>Target: {supabaseHost.split('.')[0]}</span>
           </div>
         </div>
       </div>
@@ -702,7 +659,7 @@ export const SyncManagerView: React.FC<SyncManagerViewProps> = ({
                   Validação Pública de Laudos & QR Codes
                 </p>
                 <p className="text-[10px] text-blue-700 leading-relaxed">
-                  Os QR Codes gerados nas etiquetas térmicas Niimbot e nos certificados PDF apontarão para este domínio ({portalUrl}/validar/...). A consulta do laudo é feita diretamente no banco de dados Supabase.
+                  Os QR Codes gerados nas etiquetas térmicas Niimbot e nos certificados PDF apontarão para este domínio ({portalUrl}/validar/...). A consulta do laudo é feita diretamente na nuvem da plataforma.
                 </p>
               </div>
             </div>
@@ -736,12 +693,6 @@ export const SyncManagerView: React.FC<SyncManagerViewProps> = ({
         </div>
       )}
 
-      {/* Supabase Database & SQL Modal */}
-      <SupabaseDatabaseModal
-        isOpen={isSupabaseModalOpen}
-        onClose={() => setIsSupabaseModalOpen(false)}
-        onSyncComplete={loadData}
-      />
 
       {/* Complete Backup Modal with Photos */}
       <CompleteBackupModal

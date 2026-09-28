@@ -299,6 +299,43 @@ async function main() {
   ok(!r.error, 'após resolver o conflito (base = versão atual), a gravação é aceita');
   ok((await db.query(`SELECT base_updated_at FROM public.clients WHERE id = 'cli-2'`)).rows[0].base_updated_at === null, 'base_updated_at não fica gravado');
 
+  // ------------------------------------------- cadastro de usuários pelo app
+  const createUser = (who, args) => as(db, who,
+    `SELECT public.jvm_admin_create_user($1, $2, $3, $4, $5, $6, $7, $8) AS r`,
+    [args.name, args.email, args.username ?? null, args.role, args.password, args.cargo ?? null, args.reg ?? null, null]);
+  const setPassword = (who, id, pwd, email = null, username = null) => as(db, who,
+    `SELECT public.jvm_admin_set_password($1, $2, $3, $4) AS r`, [id, pwd, email, username]);
+  const parse = r => (typeof r.rows[0].r === 'string' ? JSON.parse(r.rows[0].r) : r.rows[0].r);
+
+  r = await createUser(user(a2), { name: 'Carla Técnica', email: 'Carla@Empresa2.com', username: 'carla', role: 'tecnico', password: 'Senha1234', cargo: 'Técnica', reg: 'CFT 123' });
+  ok(!r.error, `admin cadastra usuário com acesso (${r.error || 'ok'})`);
+  const carla = r.error ? null : parse(r).user;
+  ok(carla && carla.company_id === 'comp-2' && carla.has_login === true && !('password_hash' in carla), 'usuário criado na empresa do admin, com acesso e sem expor a senha');
+  const carlaAuth = carla && (await db.query(`SELECT a.email, a.encrypted_password = extensions.crypt('Senha1234', a.encrypted_password) AS ok
+      FROM public.users u JOIN auth.users a ON a.id = u.auth_user_id WHERE u.id = $1`, [carla.id])).rows[0];
+  ok(carlaAuth?.ok && carlaAuth.email === 'carla@empresa2.com', 'conta de login criada com a senha informada');
+  ok(!!(await createUser(user(a2), { name: 'Outra', email: 'carla@empresa2.com', role: 'tecnico', password: 'Senha1234' })).error, 'e-mail repetido é recusado');
+  ok(!!(await createUser(user(a2), { name: 'Outra', email: 'outra@x.com', username: 'CARLA', role: 'tecnico', password: 'Senha1234' })).error, 'nome de usuário repetido é recusado');
+  ok(!!(await createUser(user(a2), { name: 'Fraca', email: 'fraca@x.com', role: 'tecnico', password: '123' })).error, 'senha fraca é recusada');
+  ok(!!(await createUser(user(a2), { name: 'X', email: 'x@y.com', role: 'master', password: 'Senha1234' })).error, 'perfil inválido é recusado');
+  ok(!!(await createUser(user(a2), { name: 'X', email: 'semmail', role: 'tecnico', password: 'Senha1234' })).error, 'e-mail inválido é recusado');
+  const carlaUid = await uidOf(db, carla.id);
+  ok(!!(await createUser(user(carlaUid), { name: 'X', email: 'y@y.com', role: 'admin', password: 'Senha1234' })).error, 'técnico NÃO cadastra usuários com acesso');
+  ok(!!(await createUser(anon, { name: 'X', email: 'z@y.com', role: 'admin', password: 'Senha1234' })).error, 'anon NÃO cadastra usuários');
+  ok(!!(await setPassword(user(carlaUid), 'usr-a2', 'Senha9999')).error, 'técnico NÃO troca senha de ninguém');
+
+  // técnico cadastrado sem acesso (usr-fake, comp-2) recebe acesso depois
+  r = await setPassword(user(a2), 'usr-fake', 'Acesso2026', 'fake.tecnico@empresa2.com', 'fake.tec');
+  ok(!r.error && parse(r).user.has_login === true, `admin dá acesso a técnico já cadastrado (${r.error || 'ok'})`);
+  r = await setPassword(user(a2), 'usr-a', 'Senha9999');
+  ok(!!r.error, 'admin NÃO troca senha de usuário de outra empresa');
+  r = await setPassword(user(a2), 'usr-a2', 'NovaSenha2026');
+  ok(!r.error, 'admin troca a própria senha');
+  ok((await db.query(`SELECT a.encrypted_password = extensions.crypt('NovaSenha2026', a.encrypted_password) AS ok FROM auth.users a WHERE a.id = $1`, [a2])).rows[0].ok,
+    'nova senha vale para o login');
+  r = await as(db, user(a2), `SELECT has_login FROM public.users WHERE id = 'usr-sem'`);
+  ok(!r.error, 'app consegue ler se o usuário tem acesso (has_login)');
+
   // master enxerga tudo
   await db.exec(`INSERT INTO public.users (id, name, email, role, is_master_admin, password_hash) VALUES ('usr-m', 'Master', 'm@x.com', 'admin', true, 'Senha@M1')`);
   const m = await uidOf(db, 'usr-m');

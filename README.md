@@ -34,7 +34,7 @@ executado novamente sem apagar dados) e:
 Depois de executar, no painel do Supabase desative o cadastro público:
 **Authentication → Sign In / Providers → "Allow new users to sign up" = OFF**.
 
-O mesmo script pode ser copiado pela tela **Supabase Cloud → Script SQL**.
+O script fica somente no projeto (pasta `supabase/`): o app não exibe nem contém as configurações do banco.
 
 ## Como funciona a sincronização
 

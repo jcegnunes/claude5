@@ -53,6 +53,7 @@ import { USBInstallerService } from '../services/usbInstallerService';
 import { saveFileLocally } from '../utils/nativeFileSaver';
 import { ValidationPortalService, DEFAULT_VALIDATION_BASE_URL, PortalConnectionResult } from '../services/validationPortalService';
 import { CompleteBackupModal } from '../components/CompleteBackupModal';
+import { CompanyUsersPanel } from '../components/CompanyUsersPanel';
 import { FullBackupService, BackupStats, BackupProgressInfo } from '../services/fullBackupService';
 
 export const BackupSettingsView: React.FC = () => {
@@ -1055,6 +1056,9 @@ export const BackupSettingsView: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            {/* SEÇÃO: USUÁRIOS E TÉCNICOS DA EMPRESA */}
+            <CompanyUsersPanel onChange={() => setUsersList(DielectricStorageService.getUsers())} />
 
             {/* SEÇÃO: ASSINATURAS PADRÃO DOS ANALISTAS EXECUTORES */}
             <div className="pt-3 border-t border-slate-200">

@@ -53,7 +53,7 @@ export const SYNC_TABLE_ORDER: SyncTable[] = [
 
 /** Colunas de usuários liberadas para o app (a senha não é legível). */
 export const USERS_SELECT_COLUMNS =
-  'id,company_id,company_name,name,email,username,role,cargo,registration_number,crea_or_cft,phone,active,is_master_admin,signature_url,custom_settings,payload,device_id,deleted_at,created_at,updated_at';
+  'id,company_id,company_name,name,email,username,role,cargo,registration_number,crea_or_cft,phone,active,is_master_admin,signature_url,custom_settings,payload,device_id,deleted_at,created_at,updated_at,has_login';
 
 /** Tabelas baixadas do servidor (auditoria é somente envio). */
 export const PULL_TABLES: SyncTable[] = SYNC_TABLE_ORDER.filter(t => t !== 'audit_logs');
@@ -229,7 +229,7 @@ export function userToRow(u: User, deviceId: string): Record<string, any> {
     is_master_admin: !!u.isMasterAdmin,
     signature_url: u.signatureUrl || null,
     custom_settings: u.customSettings || null,
-    payload: cleanPayload(u, ['password']),
+    payload: cleanPayload(u, ['password', 'hasLogin']),
     device_id: deviceId,
     deleted_at: (u as any).deletedAt || null
   };
@@ -253,6 +253,7 @@ export function rowToUser(row: any): User {
     password: '', // senhas nunca ficam no aparelho
     active: row.active ?? true,
     isMasterAdmin: !!row.is_master_admin,
+    hasLogin: !!row.has_login,
     signatureUrl: row.signature_url || p.signatureUrl || undefined,
     customSettings: row.custom_settings || p.customSettings || undefined
   }, row);
