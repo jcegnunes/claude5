@@ -776,6 +776,14 @@ export const TestWizardView: React.FC<TestWizardViewProps> = ({
   // Selected Service Order and Effective Technician (configured on OS or selected)
   const selectedOS = serviceOrders.find(o => o.id === selectedOSId);
 
+  // Com uma OS selecionada, o cliente do ensaio é SEMPRE o cliente atual da OS
+  // (antes prevalecia o cliente antigo gravado no equipamento).
+  useEffect(() => {
+    if (selectedOS?.clientId && selectedOS.clientId !== selectedClientId) {
+      setSelectedClientId(selectedOS.clientId);
+    }
+  }, [selectedOS?.id, selectedOS?.clientId, selectedClientId]);
+
   const effectiveTechnician: User = (() => {
     if (selectedTechnicianId) {
       const found = usersList.find(u => u.id === selectedTechnicianId);
@@ -966,8 +974,10 @@ export const TestWizardView: React.FC<TestWizardViewProps> = ({
       const currentClients = clientsList.length > 0 ? clientsList : DielectricStorageService.getClients();
       const currentOrders = serviceOrders.length > 0 ? serviceOrders : DielectricStorageService.getServiceOrders();
       const targetOS = selectedOS || currentOrders.find(o => o.id === selectedOSId);
-      const client = currentClients.find(c => c.id === (selectedClientId || targetOS?.clientId)) || currentClients[0];
-      const finalClientId = client?.id || selectedClientId || targetOS?.clientId || selectedEquipment?.clientId || 'cli-1';
+      // Prioridade: cliente da OS > cliente escolhido > cliente do equipamento
+      const preferredClientId = targetOS?.clientId || selectedClientId || selectedEquipment?.clientId;
+      const client = currentClients.find(c => c.id === preferredClientId);
+      const finalClientId = client?.id || preferredClientId || '';
       const finalClientName = client?.nomeFantasia || client?.razaoSocial || targetOS?.clientName || selectedEquipment?.clientName || 'Cliente Geral';
 
       const finalTag = equipmentTag.trim() || selectedEquipment?.tag || `EPI-${selectedEquipmentType.toUpperCase().slice(0, 4)}-${Math.floor(10 + Math.random() * 90)}`;
@@ -1078,9 +1088,12 @@ export const TestWizardView: React.FC<TestWizardViewProps> = ({
       : ((emitCertificado && isEligibleForCert) ? DielectricStorageService.generateNextCertificateNumber() : undefined);
     const validationCode = editingTest?.validationCode || DielectricStorageService.generateValidationCode();
 
-    const client = clientsList.find(c => c.id === selectedClientId);
-    const clientName = client?.nomeFantasia || client?.razaoSocial || selectedOS?.clientName || selectedEquipment?.clientName || editingTest?.clientName || 'Cliente Geral';
-    const clientId = client?.id || selectedClientId || selectedOS?.clientId || selectedEquipment?.clientId || editingTest?.clientId || 'cli-1';
+    // Prioridade: cliente da OS > cliente escolhido > equipamento > ensaio em edição
+    const osForClient = selectedOS || serviceOrders.find(o => o.id === selectedOSId);
+    const preferredClientId = osForClient?.clientId || selectedClientId || selectedEquipment?.clientId || editingTest?.clientId;
+    const client = clientsList.find(c => c.id === preferredClientId) || DielectricStorageService.getClients().find(c => c.id === preferredClientId);
+    const clientName = client?.nomeFantasia || client?.razaoSocial || osForClient?.clientName || selectedEquipment?.clientName || editingTest?.clientName || 'Cliente Geral';
+    const clientId = client?.id || preferredClientId || '';
 
     // Calculate retest date (e.g. +6 or +12 months)
     const retestDateObj = new Date();

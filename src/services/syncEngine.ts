@@ -1029,10 +1029,61 @@ export class DielectricStorageService {
     return candidate;
   }
 
+  /**
+   * Aplica o cliente da OS aos equipamentos e ensaios vinculados a ela.
+   */
+  static propagateServiceOrderClient(os: ServiceOrder): { equipment: number; tests: number } {
+    const osEquipmentIds = new Set(os.equipmentIds || []);
+    const now = new Date().toISOString();
+    const eqToSync: string[] = [];
+    const testToSync: string[] = [];
+
+    const allEq = getLocal<Equipment[]>(STORAGE_KEYS.EQUIPMENT, INITIAL_EQUIPMENT);
+    allEq.forEach(eq => {
+      if (eq.deletedAt) return;
+      const linked = osEquipmentIds.has(eq.id) || eq.serviceOrderId === os.id;
+      if (linked && (eq.clientId !== os.clientId || eq.clientName !== os.clientName)) {
+        eq.clientId = os.clientId;
+        eq.clientName = os.clientName;
+        eq.updatedAt = now;
+        eq.syncStatus = 'pending';
+        eqToSync.push(eq.id);
+      }
+    });
+    if (eqToSync.length) setLocal(STORAGE_KEYS.EQUIPMENT, allEq);
+
+    const allTests = getLocal<TestRecord[]>(STORAGE_KEYS.TESTS, INITIAL_TEST_RECORDS);
+    allTests.forEach(t => {
+      if (t.deletedAt) return;
+      const linked = t.serviceOrderId === os.id ||
+        (!!os.osNumber && t.serviceOrderNumber === os.osNumber && (t.companyId || '') === (os.companyId || ''));
+      if (linked && (t.clientId !== os.clientId || t.clientName !== os.clientName)) {
+        t.clientId = os.clientId;
+        t.clientName = os.clientName;
+        t.updatedAt = now;
+        t.syncStatus = 'pending';
+        testToSync.push(t.id);
+      }
+    });
+    if (testToSync.length) setLocal(STORAGE_KEYS.TESTS, allTests);
+
+    this.enqueueMany([
+      ...eqToSync.map(id => ({ entityType: 'equipment' as const, action: 'update' as const, entityId: id })),
+      ...testToSync.map(id => ({ entityType: 'test' as const, action: 'update' as const, entityId: id }))
+    ]);
+    if (eqToSync.length || testToSync.length) {
+      this.addAuditLog('ALTERACAO', 'OrdemDeServico', os.id,
+        `Cliente da OS ${os.osNumber} alterado para ${os.clientName}: ${eqToSync.length} equipamento(s) e ${testToSync.length} ensaio(s) atualizados`,
+        undefined, undefined, os.companyId);
+    }
+    return { equipment: eqToSync.length, tests: testToSync.length };
+  }
+
   static saveServiceOrder(os: ServiceOrder): ServiceOrder {
     const all = getLocal<ServiceOrder[]>(STORAGE_KEYS.SERVICE_ORDERS, INITIAL_SERVICE_ORDERS);
     const existingIdx = all.findIndex(o => o.id === os.id);
     const isNew = existingIdx < 0;
+    const previousOS = existingIdx >= 0 ? { ...all[existingIdx] } : undefined;
     const activeComp = this.getActiveCompany();
 
     // Se a OS tiver clientId, busca o cliente para garantir companyId e clientName consistentes
@@ -1041,9 +1092,9 @@ export class DielectricStorageService {
     if (os.clientId) {
       const clientObj = this.getClients('ALL').find(c => c.id === os.clientId);
       if (clientObj) {
-        if (!resolvedClientName || resolvedClientName === 'Cliente') {
-          resolvedClientName = clientObj.nomeFantasia || clientObj.razaoSocial;
-        }
+        // O nome SEMPRE vem do cliente selecionado (antes o nome antigo era
+        // mantido quando o cliente da OS era trocado)
+        resolvedClientName = clientObj.nomeFantasia || clientObj.razaoSocial || resolvedClientName;
         if (!resolvedCompanyId && (clientObj as any).companyId) {
           resolvedCompanyId = (clientObj as any).companyId;
         }
@@ -1072,6 +1123,13 @@ export class DielectricStorageService {
     setLocal(STORAGE_KEYS.SERVICE_ORDERS, all);
 
     this.enqueueSync('service_order', isNew ? 'create' : 'update', os.id, updatedOS);
+
+    // Cliente da OS alterado: equipamentos e ensaios da OS passam para o novo
+    // cliente, para que laudos e certificados saiam com o cliente correto.
+    // (também corrige OS alteradas na versão anterior: só atualiza o que diverge)
+    if (previousOS && updatedOS.clientId) {
+      this.propagateServiceOrderClient(updatedOS);
+    }
     window.dispatchEvent(new Event('jvm-data-changed'));
     return updatedOS;
   }

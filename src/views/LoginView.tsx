@@ -184,7 +184,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             </div>
           )}
         </div>
-        <p className="text-center text-[11px] text-[#98A2AE] mt-4">Versão 6.4</p>
+        <p className="text-center text-[11px] text-[#98A2AE] mt-4">Versão 6.5</p>
       </main>
     </div>
   );

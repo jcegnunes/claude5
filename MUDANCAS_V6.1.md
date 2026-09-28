@@ -107,3 +107,10 @@ Layout mantido. Mudanças apenas de texto/ação:
 - Pedido de armazenamento persistente (o navegador não apaga os ensaios pendentes).
 - Fotos do Supabase Storage ficam disponíveis offline depois de vistas.
 - `.htaccess`: index/service worker sem cache (atualizações chegam aos celulares).
+
+## Cliente da OS nos laudos (v6.5)
+- Corrigido: ao trocar o cliente de uma OS, o nome antigo era mantido na OS.
+- Corrigido: equipamentos e ensaios da OS continuavam com o cliente antigo, e o laudo/certificado
+  saía para o cliente anterior (online e offline). Agora são atualizados junto com a OS e sincronizados.
+- No assistente de ensaio, com uma OS selecionada, vale sempre o cliente atual da OS
+  (antes prevalecia o cliente gravado no equipamento).
