@@ -52,8 +52,6 @@ import { lookupCnpj, formatCnpj } from '../services/cnpjService';
 import { USBInstallerService } from '../services/usbInstallerService';
 import { saveFileLocally } from '../utils/nativeFileSaver';
 import { ValidationPortalService, DEFAULT_VALIDATION_BASE_URL, PortalConnectionResult } from '../services/validationPortalService';
-import { SupabaseDatabaseModal } from '../components/SupabaseDatabaseModal';
-import { SupabaseService, SupabaseConnectionResult } from '../services/supabaseService';
 import { CompleteBackupModal } from '../components/CompleteBackupModal';
 import { FullBackupService, BackupStats, BackupProgressInfo } from '../services/fullBackupService';
 
@@ -69,16 +67,12 @@ export const BackupSettingsView: React.FC = () => {
   const [isDraggingLogo, setIsDraggingLogo] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
 
-  // Portal Público de Validação & Sincronização Supabase
+  // Portal Público de Validação & Sincronização
   const [isTestingPortal, setIsTestingPortal] = useState(false);
   const [portalTestFeedback, setPortalTestFeedback] = useState<PortalConnectionResult | null>(null);
   const [isSyncingCloud, setIsSyncingCloud] = useState(false);
   const [cloudSyncStatus, setCloudSyncStatus] = useState<string | null>(null);
 
-  // Supabase Sync & DB State
-  const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
-  const [isTestingSupabase, setIsTestingSupabase] = useState(false);
-  const [supabaseTestFeedback, setSupabaseTestFeedback] = useState<SupabaseConnectionResult | null>(null);
 
   // Complete Backup Modal State
   const [isCompleteBackupModalOpen, setIsCompleteBackupModalOpen] = useState(false);
@@ -389,7 +383,7 @@ export const BackupSettingsView: React.FC = () => {
 
   const handleSyncNowCloud = async () => {
     setIsSyncingCloud(true);
-    setCloudSyncStatus('Sincronizando com o banco de dados Supabase...');
+    setCloudSyncStatus('Sincronizando com a plataforma...');
     try {
       const res = await DielectricStorageService.syncWithCentralServer(navigator.onLine);
       setCloudSyncStatus(res.success ? (res.message || 'Sincronização concluída.') : (res.error || 'Falha na sincronização.'));
@@ -398,28 +392,6 @@ export const BackupSettingsView: React.FC = () => {
       setCloudSyncStatus('Erro: ' + (err.message || err));
     } finally {
       setIsSyncingCloud(false);
-    }
-  };
-
-  const handleTestSupabase = async () => {
-    setIsTestingSupabase(true);
-    setSupabaseTestFeedback(null);
-    try {
-      const res = await SupabaseService.testConnection({
-        url: company.supabaseUrl || 'https://cdtbzbshylrcprvmjpgc.supabase.co',
-        anonKey: company.supabaseAnonKey || 'sb_publishable_j3sUJcAb-zBEQI_S09u2Cg_X1-WJ-8M'
-      });
-      setSupabaseTestFeedback(res);
-    } catch (err: any) {
-      setSupabaseTestFeedback({
-        success: false,
-        latencyMs: 0,
-        url: company.supabaseUrl || 'https://cdtbzbshylrcprvmjpgc.supabase.co',
-        message: err.message || 'Falha ao testar conexão Supabase',
-        isReady: false
-      });
-    } finally {
-      setIsTestingSupabase(false);
     }
   };
 
@@ -1397,7 +1369,7 @@ export const BackupSettingsView: React.FC = () => {
               </div>
             </div>
 
-            {/* SEÇÃO: PORTAL PÚBLICO DE VALIDAÇÃO & SINCRONIZAÇÃO SUPABASE */}
+            {/* SEÇÃO: PORTAL PÚBLICO DE VALIDAÇÃO & SINCRONIZAÇÃO */}
             <div className="pt-4 border-t-2 border-emerald-100 bg-gradient-to-br from-emerald-50/40 via-blue-50/30 to-slate-50 p-4 rounded-2xl border border-emerald-200 space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-emerald-200/80 pb-2.5">
                 <div className="flex items-center gap-2">
@@ -1412,7 +1384,7 @@ export const BackupSettingsView: React.FC = () => {
                       </span>
                     </h4>
                     <p className="text-[11px] text-slate-600">
-                      Endereço oficial para consulta e autenticação de laudos via QR Code (dados consultados no Supabase)
+                      Endereço oficial para consulta e autenticação de laudos via QR Code
                     </p>
                   </div>
                 </div>
@@ -1534,115 +1506,7 @@ export const BackupSettingsView: React.FC = () => {
                     />
                     <div>
                       <span className="font-bold text-slate-900 block text-xs">Sincronização Automática em Segundo Plano</span>
-                      <span className="text-[10px] text-slate-500">Envia ensaios e laudos automaticamente ao Supabase logo após serem salvos</span>
-                    </div>
-                  </label>
-                </div>
-              </div>
-            </div>
-
-            {/* Supabase Cloud Database Section */}
-            <div className="p-5 bg-gradient-to-r from-emerald-50/70 via-teal-50/70 to-slate-50 rounded-2xl border border-emerald-200 space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-emerald-200/80">
-                <div className="flex items-center gap-2.5">
-                  <div className="p-2 rounded-xl bg-emerald-600 text-white shadow-xs">
-                    <Database className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-bold text-slate-900 text-sm">Banco de Dados Supabase (PostgreSQL Cloud)</h4>
-                      <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-emerald-600 text-white shadow-2xs">
-                        Ativo
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-600">
-                      Sincronização na nuvem com Postgres, RLS e suporte a multi-usuários
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleTestSupabase}
-                    disabled={isTestingSupabase}
-                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-50 shadow-xs cursor-pointer"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isTestingSupabase ? 'animate-spin' : ''}`} />
-                    <span>{isTestingSupabase ? 'Testando...' : 'Testar Conexão'}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setIsSupabaseModalOpen(true)}
-                    className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
-                  >
-                    <Code className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Script SQL & Opções</span>
-                  </button>
-                </div>
-              </div>
-
-              {supabaseTestFeedback && (
-                <div className={`p-3 rounded-xl border text-xs flex items-center justify-between gap-2 ${
-                  supabaseTestFeedback.success
-                    ? 'bg-emerald-100/90 border-emerald-300 text-emerald-900'
-                    : 'bg-amber-100/90 border-amber-300 text-amber-900'
-                }`}>
-                  <div className="flex items-center gap-2">
-                    {supabaseTestFeedback.success ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                    ) : (
-                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                    )}
-                    <span className="font-semibold">{supabaseTestFeedback.message}</span>
-                  </div>
-                  {supabaseTestFeedback.latencyMs > 0 && (
-                    <span className="font-mono text-[10px] bg-white/70 px-2 py-0.5 rounded-md font-bold">
-                      {supabaseTestFeedback.latencyMs}ms
-                    </span>
-                  )}
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                <div>
-                  <label className="block font-bold text-slate-800 mb-1">
-                    Supabase Project URL
-                  </label>
-                  <input
-                    type="text"
-                    value={company.supabaseUrl || 'https://cdtbzbshylrcprvmjpgc.supabase.co'}
-                    onChange={(e) => setCompany({ ...company, supabaseUrl: e.target.value })}
-                    placeholder="https://cdtbzbshylrcprvmjpgc.supabase.co"
-                    className="w-full p-2 border border-slate-300 rounded-xl bg-white font-mono text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-800 mb-1">
-                    Supabase Anon Public Key
-                  </label>
-                  <input
-                    type="password"
-                    value={company.supabaseAnonKey || 'sb_publishable_j3sUJcAb-zBEQI_S09u2Cg_X1-WJ-8M'}
-                    onChange={(e) => setCompany({ ...company, supabaseAnonKey: e.target.value })}
-                    placeholder="sb_publishable_..."
-                    className="w-full p-2 border border-slate-300 rounded-xl bg-white font-mono text-xs text-slate-900 focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
-
-                <div className="sm:col-span-2 pt-1">
-                  <label className="flex items-center gap-2 p-2.5 bg-white rounded-xl border border-slate-200 cursor-pointer hover:border-emerald-300 transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={company.supabaseAutoSync ?? true}
-                      onChange={(e) => setCompany({ ...company, supabaseAutoSync: e.target.checked })}
-                      className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
-                    />
-                    <div>
-                      <span className="font-bold text-slate-900 block text-xs">Sincronização Automática com Supabase</span>
-                      <span className="text-[10px] text-slate-500">Envia cópia instantânea dos laudos, EPIs e clientes para as tabelas PostgreSQL do Supabase</span>
+                      <span className="text-[10px] text-slate-500">Envia ensaios e laudos automaticamente à plataforma logo após serem salvos</span>
                     </div>
                   </label>
                 </div>
@@ -1902,12 +1766,6 @@ export const BackupSettingsView: React.FC = () => {
           </div>
         </div>
       </div>
-
-      {/* Supabase Database & SQL Modal */}
-      <SupabaseDatabaseModal
-        isOpen={isSupabaseModalOpen}
-        onClose={() => setIsSupabaseModalOpen(false)}
-      />
 
       {/* Complete Backup & Photographic Records Modal */}
       <CompleteBackupModal
