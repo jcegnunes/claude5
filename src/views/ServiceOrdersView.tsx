@@ -1,29 +1,29 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  ClipboardList, 
-  Plus, 
-  Search, 
-  Calendar, 
-  Building2, 
-  FlaskConical, 
-  Shield, 
-  X, 
-  UserCheck, 
-  MapPin, 
-  Phone, 
-  Mail, 
-  User as UserIcon, 
-  CheckSquare, 
-  Square, 
-  AlertCircle, 
-  Eye, 
-  Award, 
-  FileText, 
-  FileCheck, 
-  ExternalLink, 
-  Edit3, 
-  Save, 
-  Trash2, 
+import {
+  ClipboardList,
+  Plus,
+  Search,
+  Calendar,
+  Building2,
+  FlaskConical,
+  Shield,
+  X,
+  UserCheck,
+  MapPin,
+  Phone,
+  Mail,
+  User as UserIcon,
+  CheckSquare,
+  Square,
+  AlertCircle,
+  Eye,
+  Award,
+  FileText,
+  FileCheck,
+  ExternalLink,
+  Edit3,
+  Save,
+  Trash2,
   FileSpreadsheet,
   RefreshCw,
   CheckCircle2,
@@ -49,6 +49,8 @@ export const ServiceOrdersView: React.FC<ServiceOrdersViewProps> = ({ onStartTes
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  // OS aberta no formulário para edição (null = nova OS)
+  const [editingOS, setEditingOS] = useState<ServiceOrder | null>(null);
   const [isQuickTechModalOpen, setIsQuickTechModalOpen] = useState(false);
   const [selectedOSForDetails, setSelectedOSForDetails] = useState<ServiceOrder | null>(null);
   const [osToDelete, setOSToDelete] = useState<ServiceOrder | null>(null);
@@ -65,7 +67,7 @@ export const ServiceOrdersView: React.FC<ServiceOrdersViewProps> = ({ onStartTes
   const [artFileUrl, setArtFileUrl] = useState<string | undefined>(undefined);
   const [artFileName, setArtFileName] = useState<string | undefined>(undefined);
   const [selectedEqIds, setSelectedEqIds] = useState<string[]>([]);
-  
+
   // Details Modal ART edit state
   const [isEditingDetailsArt, setIsEditingDetailsArt] = useState(false);
   const [detailsArtNumber, setDetailsArtNumber] = useState('');
@@ -153,7 +155,33 @@ export const ServiceOrdersView: React.FC<ServiceOrdersViewProps> = ({ onStartTes
     setArtFileUrl(undefined);
     setArtFileName(undefined);
     setSelectedEqIds([]);
+    setScheduledDate(new Date().toISOString().split('T')[0]);
+    setDescription('Ensaio de rotina e periódico em EPIs/EPCs dielétricos');
+    setEditingOS(null);
     setIsAddModalOpen(true);
+  };
+
+  /** Abre o mesmo formulário preenchido com os dados da OS. */
+  const handleOpenEditModal = (os: ServiceOrder) => {
+    setClients(DielectricStorageService.getClients('ALL'));
+    setUsers(DielectricStorageService.getUsers('ALL'));
+    setEquipmentList(DielectricStorageService.getEquipment('ALL'));
+    setClientId(os.clientId || '');
+    setTechnicianId(os.technicianId || os.responsibleId || '');
+    setScheduledDate(os.scheduledDate || os.openDate || new Date().toISOString().split('T')[0]);
+    setDescription(os.notes || '');
+    setArtNumber(os.artNumber || '');
+    setArtFileUrl(os.artFileUrl);
+    setArtFileName(os.artFileName);
+    setSelectedEqIds(os.equipmentIds || []);
+    setClientSearchFilter('');
+    setEditingOS(os);
+    setIsAddModalOpen(true);
+  };
+
+  const closeOSModal = () => {
+    setIsAddModalOpen(false);
+    setEditingOS(null);
   };
 
   const handleCreateOS = (e: React.FormEvent) => {
@@ -168,6 +196,34 @@ export const ServiceOrdersView: React.FC<ServiceOrdersViewProps> = ({ onStartTes
     const tech = allUsers.find(u => u.id === technicianId) || allUsers[0];
     const techId = tech?.id || 'usr-master-admin-001';
     const techName = tech?.name || 'Técnico Responsável';
+
+    if (editingOS) {
+      const updatedOS: ServiceOrder = {
+        ...editingOS,
+        clientId,
+        clientName: client?.nomeFantasia || client?.razaoSocial || editingOS.clientName || 'Cliente Geral',
+        scheduledDate,
+        responsibleId: techId,
+        responsibleName: techName,
+        technicianId: techId,
+        technicianName: techName,
+        notes: description,
+        artNumber: artNumber.trim() || undefined,
+        artFileUrl,
+        artFileName,
+        equipmentIds: selectedEqIds,
+        updatedAt: new Date().toISOString()
+      };
+      const saved = DielectricStorageService.saveServiceOrder(updatedOS);
+      loadData();
+      closeOSModal();
+      if (selectedOSForDetails?.id === saved.id) setSelectedOSForDetails(saved);
+      showToast(`Ordem de Serviço ${saved.osNumber} atualizada.`, 'success');
+      import('../services/supabaseService')
+        .then(({ SupabaseService }) => SupabaseService.pushRecord('service_orders', saved))
+        .catch(() => {});
+      return;
+    }
 
     const nextNum = DielectricStorageService.generateNextOSNumber();
 
@@ -195,7 +251,7 @@ export const ServiceOrdersView: React.FC<ServiceOrdersViewProps> = ({ onStartTes
 
     const savedOS = DielectricStorageService.saveServiceOrder(newOS);
     loadData();
-    setIsAddModalOpen(false);
+    closeOSModal();
 
     showToast(`Ordem de Serviço ${savedOS.osNumber} aberta e sincronizada com sucesso!`, 'success');
 
@@ -240,7 +296,7 @@ export const ServiceOrdersView: React.FC<ServiceOrdersViewProps> = ({ onStartTes
   };
 
   const filteredOS = serviceOrders.filter(os => {
-    const matchesSearch = 
+    const matchesSearch =
       os.osNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (os.clientName && os.clientName.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (os.technicianName && os.technicianName.toLowerCase().includes(searchTerm.toLowerCase())) ||
@@ -437,6 +493,15 @@ export const ServiceOrdersView: React.FC<ServiceOrdersViewProps> = ({ onStartTes
                   <Eye className="w-3.5 h-3.5" /> Detalhes
                 </button>
 
+                <button
+                  type="button"
+                  onClick={() => handleOpenEditModal(os)}
+                  className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg font-semibold text-[11px] inline-flex items-center gap-1 transition-colors cursor-pointer"
+                  title="Editar os dados desta Ordem de Serviço"
+                >
+                  <Edit3 className="w-3.5 h-3.5 text-amber-600" /> Editar
+                </button>
+
                 {onOpenReportForOS && (
                   <button
                     type="button"
@@ -616,8 +681,8 @@ export const ServiceOrdersView: React.FC<ServiceOrdersViewProps> = ({ onStartTes
                   {selectedOSForDetails.equipmentIds.map(eqId => {
                     const eq = equipmentList.find(e => e.id === eqId);
                     return (
-                      <div 
-                        key={eqId} 
+                      <div
+                        key={eqId}
                         onClick={() => {
                           const osId = selectedOSForDetails.id;
                           setSelectedOSForDetails(null);
@@ -663,6 +728,18 @@ export const ServiceOrdersView: React.FC<ServiceOrdersViewProps> = ({ onStartTes
                 >
                   <Trash2 className="w-3.5 h-3.5 text-red-600" /> Excluir OS
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const toEdit = selectedOSForDetails;
+                    setSelectedOSForDetails(null);
+                    handleOpenEditModal(toEdit);
+                  }}
+                  className="px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold rounded-xl text-xs flex items-center gap-1.5 border border-amber-200 cursor-pointer transition-colors"
+                  title="Editar os dados desta Ordem de Serviço"
+                >
+                  <Edit3 className="w-3.5 h-3.5 text-amber-600" /> Editar OS
+                </button>
               </div>
 
               <div className="flex items-center gap-2">
@@ -706,17 +783,21 @@ export const ServiceOrdersView: React.FC<ServiceOrdersViewProps> = ({ onStartTes
               <div className="flex items-center gap-2.5">
                 <ClipboardList className="w-5 h-5 text-orange-400" />
                 <div>
-                  <h3 className="font-bold text-base leading-tight">Abrir Nova Ordem de Serviço (OS)</h3>
-                  <p className="text-xs text-slate-300">Preencha os itens da ordem de serviço em sequência</p>
+                  <h3 className="font-bold text-base leading-tight">
+                    {editingOS ? `Editar Ordem de Serviço ${editingOS.osNumber}` : 'Abrir Nova Ordem de Serviço (OS)'}
+                  </h3>
+                  <p className="text-xs text-slate-300">
+                    {editingOS ? 'Altere os dados e salve. Número, data de abertura e status são mantidos.' : 'Preencha os itens da ordem de serviço em sequência'}
+                  </p>
                 </div>
               </div>
-              <button onClick={() => setIsAddModalOpen(false)} className="p-1 text-slate-300 hover:text-white rounded-lg hover:bg-white/10">
+              <button onClick={closeOSModal} className="p-1 text-slate-300 hover:text-white rounded-lg hover:bg-white/10">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <form onSubmit={handleCreateOS} className="p-6 overflow-y-auto space-y-5 text-xs">
-              
+
               {/* ITEM 1: SELEÇÃO DO CLIENTE CADASTRADO */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -950,7 +1031,7 @@ export const ServiceOrdersView: React.FC<ServiceOrdersViewProps> = ({ onStartTes
                 {artFileName && (
                   <div className="flex items-center justify-between text-[11px] text-amber-950 bg-white px-3 py-1.5 rounded-lg border border-amber-200 shadow-2xs">
                     <span className="truncate flex items-center gap-1.5">
-                      <FileCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" /> 
+                      <FileCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                       Arquivo selecionado: <strong className="font-semibold">{artFileName}</strong>
                     </span>
                     <button
@@ -1002,22 +1083,22 @@ export const ServiceOrdersView: React.FC<ServiceOrdersViewProps> = ({ onStartTes
                         <div
                           key={eq.id}
                           onClick={() => {
-                            setSelectedEqIds(prev => 
+                            setSelectedEqIds(prev =>
                               isSelected ? prev.filter(id => id !== eq.id) : [...prev, eq.id]
                             );
                           }}
                           className={`p-2.5 rounded-xl text-xs flex items-center justify-between cursor-pointer border transition-all ${
-                            isSelected 
-                              ? 'bg-blue-50 border-blue-400 text-blue-950 font-bold shadow-xs' 
+                            isSelected
+                              ? 'bg-blue-50 border-blue-400 text-blue-950 font-bold shadow-xs'
                               : 'bg-white border-slate-200 hover:border-slate-300 text-slate-700'
                           }`}
                         >
                           <div className="flex items-center gap-2">
-                            <input 
-                              type="checkbox" 
-                              checked={isSelected} 
-                              readOnly 
-                              className="rounded-sm text-blue-600 focus:ring-blue-500 pointer-events-none" 
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              readOnly
+                              className="rounded-sm text-blue-600 focus:ring-blue-500 pointer-events-none"
                             />
                             <div>
                               <div className="flex items-center gap-1.5">
@@ -1059,7 +1140,7 @@ export const ServiceOrdersView: React.FC<ServiceOrdersViewProps> = ({ onStartTes
               <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-200">
                 <button
                   type="button"
-                  onClick={() => setIsAddModalOpen(false)}
+                  onClick={closeOSModal}
                   className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl font-semibold hover:bg-slate-200 transition-colors"
                 >
                   Cancelar
@@ -1069,7 +1150,7 @@ export const ServiceOrdersView: React.FC<ServiceOrdersViewProps> = ({ onStartTes
                   disabled={!clientId}
                   className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white rounded-xl font-bold shadow-sm transition-all active:scale-98"
                 >
-                  Gerar Ordem de Serviço
+                  {editingOS ? 'Salvar Alterações' : 'Gerar Ordem de Serviço'}
                 </button>
               </div>
             </form>
