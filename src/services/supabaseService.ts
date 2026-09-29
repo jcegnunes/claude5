@@ -1,3 +1,5 @@
+import { getPhotoBlob, isLocalPhotoRef } from './photoStore';
+import { inlineTestPhotos } from './photoExternalizer';
 import { createClient, SupabaseClient, RealtimeChannel, Session } from '@supabase/supabase-js';
 import {
   Client,
@@ -482,6 +484,9 @@ export class SupabaseService {
           const uploaded = await this.uploadTestMedia(client, record as TestRecord);
           record = uploaded.record;
           result.details.photos += uploaded.count;
+          // Foto que não subiu para o Storage vai embutida: a referência local
+          // só existe neste aparelho e nunca pode ir para o banco
+          record = await inlineTestPhotos(record as TestRecord);
         }
         prepared.push({ item, row: this.buildRow(entityType, record, deviceId) });
       }
@@ -740,12 +745,14 @@ export class SupabaseService {
    */
   private static async uploadTestMedia(client: SupabaseClient, test: TestRecord): Promise<{ record: TestRecord; count: number }> {
     if (this.storageUnavailable) return { record: test, count: 0 };
+    // Fotos em base64 ou guardadas no aparelho (referência local "jvm-foto:")
+    const isPending = (u: unknown): u is string => typeof u === 'string' && (u.startsWith('data:') || isLocalPhotoRef(u));
     const targets: Array<{ key: string; dataUrl: string }> = [];
     (test.photos || []).forEach((ph, idx) => {
-      if (ph?.url && ph.url.startsWith('data:')) targets.push({ key: ph.id || `foto-${idx}`, dataUrl: ph.url });
+      if (isPending(ph?.url)) targets.push({ key: ph.id || `foto-${idx}`, dataUrl: ph.url });
     });
     (test.visualInspection || []).forEach((v: any, idx: number) => {
-      if (v?.photoUrl && typeof v.photoUrl === 'string' && v.photoUrl.startsWith('data:')) {
+      if (isPending(v?.photoUrl)) {
         targets.push({ key: `inspecao-${v.id || idx}`, dataUrl: v.photoUrl });
       }
     });
@@ -757,7 +764,14 @@ export class SupabaseService {
 
     for (const t of targets) {
       if (urlMap[t.dataUrl]) continue;
-      const parsed = dataUrlToBlob(t.dataUrl);
+      let parsed = isLocalPhotoRef(t.dataUrl) ? null : dataUrlToBlob(t.dataUrl);
+      if (isLocalPhotoRef(t.dataUrl)) {
+        const blob = await getPhotoBlob(t.dataUrl);
+        if (blob) {
+          const mime = blob.type || 'image/jpeg';
+          parsed = { blob, mime, ext: (mime.split('/')[1] || 'jpg').replace('jpeg', 'jpg').replace(/[^a-z0-9]/gi, '') };
+        }
+      }
       if (!parsed) continue;
       const path = `${companyFolder}/${testFolder}/${t.key.replace(/[^a-zA-Z0-9_-]/g, '_')}-${Date.now()}.${parsed.ext}`;
       const { error } = await client.storage.from(EVIDENCE_BUCKET).upload(path, parsed.blob, {

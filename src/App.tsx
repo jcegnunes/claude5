@@ -14,6 +14,7 @@ import { LoginView } from './views/LoginView';
 import { CompanySetupView } from './views/CompanySetupView';
 import { EMPTY_USER } from './services/syncEngine';
 import { lazyView } from './utils/lazyView';
+import { startPhotoStorage } from './services/photoExternalizer';
 
 // Telas carregadas sob demanda (arquivos separados)
 const DashboardView = lazyView(() => import('./views/DashboardView'), 'DashboardView');
@@ -157,6 +158,8 @@ export default function App() {
 
   useEffect(() => {
     refreshSyncCount();
+    // Fotos dos ensaios: guardadas à parte no aparelho, lidas só quando exibidas
+    startPhotoStorage();
 
     // Sincronização automática com o Supabase (banco único): envio da fila
     // local, download incremental, Realtime e reenvio ao voltar a conexão.
@@ -538,8 +541,8 @@ export default function App() {
       {syncToast && (
         <div className="fixed top-4 right-4 z-50 max-w-md animate-bounce-short shadow-2xl rounded-2xl overflow-hidden border">
           <div className={`p-4 flex items-start gap-3 ${
-            syncToast.type === 'success' 
-              ? 'bg-emerald-900 border-emerald-500 text-white' 
+            syncToast.type === 'success'
+              ? 'bg-emerald-900 border-emerald-500 text-white'
               : syncToast.type === 'error'
               ? 'bg-red-900 border-red-500 text-white'
               : 'bg-slate-900 border-slate-700 text-white'
@@ -555,7 +558,7 @@ export default function App() {
               </p>
               <p className="text-slate-200 mt-0.5 leading-relaxed">{syncToast.message}</p>
             </div>
-            <button 
+            <button
               onClick={() => setSyncToast(null)}
               className="text-slate-400 hover:text-white text-xs font-bold px-1"
             >

@@ -1,25 +1,25 @@
-import { 
-  Client, 
-  Equipment, 
-  ServiceOrder, 
-  LabInstrument, 
-  NormCriterion, 
-  TestRecord, 
-  User, 
-  AuditLog, 
+import {
+  Client,
+  Equipment,
+  ServiceOrder,
+  LabInstrument,
+  NormCriterion,
+  TestRecord,
+  User,
+  AuditLog,
   SyncConflict,
   Company,
   CompanyLabInfo,
   ConsolidatedReport
 } from '../types';
-import { 
-  INITIAL_CLIENTS, 
-  INITIAL_EQUIPMENT, 
-  INITIAL_SERVICE_ORDERS, 
-  INITIAL_INSTRUMENTS, 
-  INITIAL_NORMS, 
-  INITIAL_TEST_RECORDS, 
-  INITIAL_USERS, 
+import {
+  INITIAL_CLIENTS,
+  INITIAL_EQUIPMENT,
+  INITIAL_SERVICE_ORDERS,
+  INITIAL_INSTRUMENTS,
+  INITIAL_NORMS,
+  INITIAL_TEST_RECORDS,
+  INITIAL_USERS,
   INITIAL_AUDIT_LOGS,
   INITIAL_COMPANIES,
   JVM_COMPANY_INFO
@@ -254,14 +254,14 @@ export class DielectricStorageService {
             const seedMatch = INITIAL_NORMS.find(sn => sn.id === n.id || (sn.applicableEquipmentTypes.includes('luva_isolante') && sn.dielectricClass === n.dielectricClass));
             if (seedMatch && (n.normCode !== 'NBR 16295 Tabela 4' || !n.gloveLengthLimits || (n.gloveLengthLimits[360] && n.gloveLengthLimits[360]! < 20) || n.maxLeakageCurrent < 20)) {
               updated = true;
-              return { 
-                ...n, 
-                ...seedMatch, 
-                normCode: 'NBR 16295 Tabela 4', 
+              return {
+                ...n,
+                ...seedMatch,
+                normCode: 'NBR 16295 Tabela 4',
                 maxLeakageCurrent: seedMatch.maxLeakageCurrent,
                 gloveLengthLimits: seedMatch.gloveLengthLimits,
                 notes: seedMatch.notes,
-                history: n.history || seedMatch.history 
+                history: n.history || seedMatch.history
               };
             }
           }
@@ -783,7 +783,7 @@ export class DielectricStorageService {
       cityState: formattedCityState || info.cityState || '',
       certificateEmissionSettings: info.certificateEmissionSettings || JVM_COMPANY_INFO.certificateEmissionSettings
     };
-    
+
     setLocal(STORAGE_KEYS.COMPANY, updated);
     this.enqueueSync('company_info', 'update', this.getActiveCompany().id);
 
@@ -841,7 +841,7 @@ export class DielectricStorageService {
     // Safety lock: If new client ID but identical clean CNPJ exists in the same company, merge/update existing to prevent duplication
     const cleanNewCnpj = (client.cnpj || '').replace(/\D/g, '');
     if (isNew && cleanNewCnpj && cleanNewCnpj.length >= 11) {
-      const duplicateCnpjIdx = allClients.findIndex(c => 
+      const duplicateCnpjIdx = allClients.findIndex(c =>
         !c.deletedAt && (c.companyId || 'comp-jvm') === targetCompId && (c.cnpj || '').replace(/\D/g, '') === cleanNewCnpj
       );
       if (duplicateCnpjIdx >= 0) {
@@ -868,7 +868,7 @@ export class DielectricStorageService {
     }
 
     setLocal(STORAGE_KEYS.CLIENTS, allClients);
-    
+
     this.enqueueSync('client', existingIdx < 0 ? 'create' : 'update', updatedClient.id, updatedClient);
     window.dispatchEvent(new Event('jvm-data-changed'));
     return updatedClient;
@@ -982,9 +982,9 @@ export class DielectricStorageService {
     if (deletedCount > 0) {
       setLocal(STORAGE_KEYS.EQUIPMENT, all);
       this.addAuditLog(
-        'EXCLUSAO', 
-        'Equipamento', 
-        ids.join(', '), 
+        'EXCLUSAO',
+        'Equipamento',
+        ids.join(', '),
         `Exclusão em lote de ${deletedCount} equipamento(s): ${deletedTags.slice(0, 10).join(', ')}${deletedTags.length > 10 ? ` e mais ${deletedTags.length - 10}...` : ''}`
       );
       window.dispatchEvent(new Event('jvm-data-changed'));
@@ -1346,7 +1346,7 @@ export class DielectricStorageService {
     const all = getLocal<TestRecord[]>(STORAGE_KEYS.TESTS, INITIAL_TEST_RECORDS);
     const now = new Date().toISOString();
     let deletedCount = 0;
-    
+
     ids.forEach(id => {
       const test = all.find(t => t.id === id || t.uuid === id);
       if (test) {
@@ -1486,7 +1486,7 @@ export class DielectricStorageService {
     if (isNew) {
       updatedTest.createdAt = new Date().toISOString();
       tests.unshift(updatedTest);
-      
+
       this.addAuditLog(
         test.result === 'APROVADO' ? 'APROVACAO' : 'REPROVACAO',
         'EnsaioDielétrico',
@@ -1715,9 +1715,9 @@ export class DielectricStorageService {
   }
 
   static addAuditLog(
-    action: AuditLog['action'], 
-    entityType: string, 
-    entityId: string, 
+    action: AuditLog['action'],
+    entityType: string,
+    entityId: string,
     description: string,
     previousValue?: string,
     newValue?: string,
@@ -1894,6 +1894,11 @@ export class DielectricStorageService {
   }
 
   /** Atualiza URLs de fotos de um ensaio após envio ao Supabase Storage (sem reenfileirar). */
+  /** Todos os ensaios guardados no aparelho, inclusive excluídos (uso interno). */
+  static getAllTestsRaw(): TestRecord[] {
+    return getLocal<TestRecord[]>(STORAGE_KEYS.TESTS, []).filter(Boolean);
+  }
+
   static replaceTestMediaUrls(testId: string, urlMap: Record<string, string>): void {
     if (!urlMap || Object.keys(urlMap).length === 0) return;
     const tests = getLocal<TestRecord[]>(STORAGE_KEYS.TESTS, []);
@@ -2214,7 +2219,7 @@ export class DielectricStorageService {
     let pendingPhotos = 0;
     getLocal<TestRecord[]>(STORAGE_KEYS.TESTS, []).forEach(t => {
       if (pendingTestIds.has(t.id) && Array.isArray(t.photos)) {
-        pendingPhotos += t.photos.filter(p => p.url && p.url.startsWith('data:')).length;
+        pendingPhotos += t.photos.filter(p => p.url && (p.url.startsWith('data:') || p.url.startsWith('jvm-foto:'))).length;
       }
     });
     const lastSync = getLocal<string | null>(STORAGE_KEYS.LAST_SYNC, null);
@@ -2477,19 +2482,19 @@ export class DielectricStorageService {
    * Sincronização completa com o Supabase (banco único da plataforma):
    * envia a fila local e baixa as alterações feitas em outros dispositivos.
    */
-  static async syncWithCentralServer(isOnline: boolean = true): Promise<{ 
-    success: boolean; 
-    pushedCount: number; 
+  static async syncWithCentralServer(isOnline: boolean = true): Promise<{
+    success: boolean;
+    pushedCount: number;
     pulledCount?: number;
     details?: { tests: number; equipment: number; serviceOrders: number; clients: number; photos: number };
     message?: string;
     error?: string;
   }> {
     if (!isOnline || (typeof navigator !== 'undefined' && !navigator.onLine)) {
-      return { 
-        success: false, 
-        pushedCount: 0, 
-        error: 'Dispositivo sem conexão com a internet. Os ensaios permanecem salvos no aparelho e serão enviados ao Supabase automaticamente quando a conexão voltar.' 
+      return {
+        success: false,
+        pushedCount: 0,
+        error: 'Dispositivo sem conexão com a internet. Os ensaios permanecem salvos no aparelho e serão enviados ao Supabase automaticamente quando a conexão voltar.'
       };
     }
 

@@ -60,12 +60,12 @@ export interface User {
   };
 }
 
-export type EquipmentStatus = 
-  | 'em_uso' 
-  | 'disponivel' 
-  | 'em_manutencao' 
-  | 'reprovado' 
-  | 'descartado' 
+export type EquipmentStatus =
+  | 'em_uso'
+  | 'disponivel'
+  | 'em_manutencao'
+  | 'reprovado'
+  | 'descartado'
   | 'fora_de_servico';
 
 export type DielectricClass = '00' | '0' | '1' | '2' | '3' | '4';
@@ -87,13 +87,13 @@ export type EquipmentType =
 
 export interface IsolatedToolItem {
   id: string;
-  toolType: 
-    | 'chave_fenda' 
-    | 'chave_philips' 
-    | 'alicate_universal' 
-    | 'alicate_corte' 
-    | 'alicate_bico' 
-    | 'chave_inglesa' 
+  toolType:
+    | 'chave_fenda'
+    | 'chave_philips'
+    | 'alicate_universal'
+    | 'alicate_corte'
+    | 'alicate_bico'
+    | 'chave_inglesa'
     | 'chave_ajustavel'
     | 'chave_estrela_boca'
     | 'arco_serra_isolado'
@@ -195,12 +195,12 @@ export interface Client {
   syncStatus?: 'synced' | 'pending' | 'conflict';
 }
 
-export type ServiceOrderStatus = 
-  | 'aberta' 
-  | 'agendada' 
-  | 'em_execucao' 
-  | 'aguardando' 
-  | 'concluida' 
+export type ServiceOrderStatus =
+  | 'aberta'
+  | 'agendada'
+  | 'em_execucao'
+  | 'aguardando'
+  | 'concluida'
   | 'cancelada';
 
 export interface ServiceOrder {
@@ -301,6 +301,8 @@ export interface TestPhoto {
   caption: string;
   timestamp: string;
   userName: string;
+  /** Data da última edição (giro/marcações) feita no editor de fotos. */
+  editedAt?: string;
   gpsCoords?: {
     latitude: number;
     longitude: number;
@@ -351,13 +353,13 @@ export interface TestRecord {
   testDate: string;
   testTime: string;
   location: string; // Ex: 'Laboratório Central JVM' ou 'Em campo - Subestação Cliente'
-  
+
   // Norm reference
   normCriterionId?: string;
   normCode: string;
   procedureCode?: string;
   appliedClass: string;
-  
+
   // Measurements
   appliedVoltage_kV: number;
   voltageType: 'AC' | 'DC';
@@ -386,14 +388,14 @@ export interface TestRecord {
   ladderLengthExtended_m?: number;
   ladderLoadCapacity_kg?: number;
   ladderMoistureConditioned?: boolean;
-  
+
   // Environmental
   environmental: EnvironmentalConditions;
-  
+
   // Visual Inspection
   visualInspection: ChecklistItem[];
   visualInspectionPassed: boolean;
-  
+
   // Test Instruments Used
   instrumentsUsed: Array<{
     id: string;
@@ -405,7 +407,7 @@ export interface TestRecord {
     isCalibrationValid: boolean;
   }>;
   calibrationOverrideAuthorizedBy?: string; // If calibration was expired but authorized by RT
-  
+
   // Overall result
   result: TestResult;
   resultRationale: string;
@@ -423,12 +425,12 @@ export interface TestRecord {
   };
   technicalNotes?: string;
   retestDueDate: string;
-  
+
   // Photographic evidence
   photos: TestPhoto[];
   oscillogramImage?: string;
   waveformImage?: string;
-  
+
   // Signatures
   technicianSignature?: {
     signatureImage: string;
@@ -450,12 +452,12 @@ export interface TestRecord {
     documentNumber?: string;
     signedAt: string;
   };
-  
+
   // Validation
   validationCode: string; // Hash / code for public verification
   documentHash: string; // SHA-256 equivalent
   qrCodeDataUrl?: string;
-  
+
   // Sync
   createdAt: string;
   updatedAt: string;
@@ -468,18 +470,18 @@ export interface TestRecord {
 export interface AuditLog {
   id: string;
   companyId?: string;
-  action: 
-    | 'LOGIN' 
-    | 'LOGOUT' 
-    | 'CADASTRO' 
-    | 'ALTERACAO' 
-    | 'EXCLUSAO' 
-    | 'ENSAIO_CRIADO' 
-    | 'APROVACAO' 
-    | 'REPROVACAO' 
-    | 'EMISSAO_CERTIFICADO' 
-    | 'CANCELAMENTO' 
-    | 'SINCRONIZACAO' 
+  action:
+    | 'LOGIN'
+    | 'LOGOUT'
+    | 'CADASTRO'
+    | 'ALTERACAO'
+    | 'EXCLUSAO'
+    | 'ENSAIO_CRIADO'
+    | 'APROVACAO'
+    | 'REPROVACAO'
+    | 'EMISSAO_CERTIFICADO'
+    | 'CANCELAMENTO'
+    | 'SINCRONIZACAO'
     | 'ALTERACAO_CRITERIOS';
   userName: string;
   userRole: string;

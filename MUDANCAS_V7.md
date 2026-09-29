@@ -146,6 +146,41 @@ UPDATE public.users SET active = false WHERE email = 'maria@empresa.com.br';
   banco pelo `schema.sql`. Ensaios e laudos já emitidos mantêm o limite registrado na
   época. Coberto pelos testes em `src/services/__tests__/tapete.test.ts`.
 
+## Fotos guardadas à parte no aparelho
+
+- As fotos dos ensaios (evidências e inspeção visual) saem de dentro dos registros e ficam
+  guardadas como **arquivos binários** num armazenamento próprio do aparelho (área privada
+  do app no disco). O ensaio guarda só a referência `jvm-foto:<id>`.
+- A foto só é lida quando é exibida, impressa (PDF/Word), copiada para backup ou enviada.
+  O limite passa a ser o **espaço livre em disco**, não a memória do aparelho.
+- Cada foto ocupa ~25% menos (binário em vez de texto base64); fotos repetidas são
+  guardadas uma única vez.
+- Fotos antigas são movidas automaticamente na abertura do app. A foto é gravada primeiro
+  e só depois o ensaio passa a apontar para ela: uma falha no meio nunca perde a foto.
+- Ao sincronizar, a foto sobe para a nuvem e a cópia local é apagada na abertura seguinte.
+  Uma referência local nunca vai para o banco: se o envio da foto falhar, ela segue
+  embutida no registro, como antes.
+- **Central de Sincronização → Armazenamento deste aparelho**: espaço usado e disponível,
+  fotos guardadas e aguardando envio, tipo de banco local e se o armazenamento está
+  protegido contra limpeza automática (com botões "Organizar fotos" e "Pedir proteção").
+- **Pasta visível no celular (Galeria / Meus arquivos) não é possível** para app web
+  instalado (Android e iPhone); exigiria converter o app em aplicativo nativo. Para ter as
+  fotos em pasta, use o **Backup com Fotos (.ZIP)**.
+
+## Editor de fotos do laudo
+
+- No assistente de ensaio, cada foto tem o botão **Editar** (lápis na miniatura e no
+  detalhe da foto).
+- **Girar** 90° para a esquerda ou direita; **marcar** com seta, círculo, retângulo e texto;
+  6 cores; espessura fina/média/grossa (proporcional ao tamanho da foto); desfazer,
+  refazer e limpar marcações.
+- As marcações acompanham a foto ao girar. Funciona com toque (celular/tablet) e mouse.
+- Ao salvar, a foto editada substitui a anterior no ensaio (JPEG) e segue o fluxo normal:
+  guardada à parte no aparelho e enviada à nuvem na sincronização. A foto original não é
+  mantida.
+- O botão de download do detalhe da foto passou a funcionar com as fotos guardadas no
+  aparelho.
+
 ## Pendências recomendadas (não alteradas)
 
 - **Vínculo de ensaio sem cliente/equipamento no banco**: quando o cliente ou o

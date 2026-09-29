@@ -1,22 +1,23 @@
+import { PhotoImg } from '../components/PhotoImg';
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  FlaskConical, 
-  CheckCircle2, 
-  XCircle, 
-  AlertCircle, 
-  Camera, 
-  Upload, 
-  ShieldCheck, 
-  ArrowRight, 
-  ArrowLeft, 
-  FileText, 
-  Award, 
-  QrCode, 
-  Thermometer, 
-  Droplets, 
-  Gauge, 
-  Check, 
-  Zap, 
+import {
+  FlaskConical,
+  CheckCircle2,
+  XCircle,
+  AlertCircle,
+  Camera,
+  Upload,
+  ShieldCheck,
+  ArrowRight,
+  ArrowLeft,
+  FileText,
+  Award,
+  QrCode,
+  Thermometer,
+  Droplets,
+  Gauge,
+  Check,
+  Zap,
   AlertTriangle,
   Info,
   Calendar,
@@ -29,6 +30,7 @@ import {
   Image as ImageIcon,
   FolderOpen,
   Maximize2,
+  Pencil,
   Trash2,
   Sparkles,
   RefreshCw,
@@ -45,35 +47,35 @@ import {
   Edit3,
   Smartphone
 } from 'lucide-react';
-import { 
-  Equipment, 
+import {
+  Equipment,
   EquipmentType,
   DielectricClass,
-  ServiceOrder, 
-  LabInstrument, 
-  NormCriterion, 
-  ChecklistItem, 
-  TestPhoto, 
-  TestRecord, 
+  ServiceOrder,
+  LabInstrument,
+  NormCriterion,
+  ChecklistItem,
+  TestPhoto,
+  TestRecord,
   User,
   IsolatedToolItem,
   CompanyLabInfo,
   Client
 } from '../types';
 import { DielectricStorageService, getDeviceId } from '../services/syncEngine';
-import { 
-  evaluateDielectricTest, 
-  getDefaultChecklistForEquipment, 
+import {
+  evaluateDielectricTest,
+  getDefaultChecklistForEquipment,
   findMatchingCriterion,
   isTestEligibleForCertificate
 } from '../services/normsEngine';
-import { 
-  getNBR16295MaxLeakageCurrent, 
-  getNBR16295Voltages, 
-  NBR_16295_LENGTH_OPTIONS, 
+import {
+  getNBR16295MaxLeakageCurrent,
+  getNBR16295Voltages,
+  NBR_16295_LENGTH_OPTIONS,
   TABELA_4_NBR_16295,
-  GloveLength_mm, 
-  GloveTestMethod 
+  GloveLength_mm,
+  GloveTestMethod
 } from '../services/nbr16295Service';
 import {
   TABELA_ASTM_D1048,
@@ -103,6 +105,7 @@ import { SignatureCanvas } from '../components/SignatureCanvas';
 import { StatusBadge } from '../components/StatusBadge';
 import { IsolatedToolsSelector } from '../components/IsolatedToolsSelector';
 import { PhotoDetailModal } from '../components/PhotoDetailModal';
+import { PhotoEditorModal } from '../components/PhotoEditorModal';
 import { LiveCameraModal } from '../components/LiveCameraModal';
 import { MobileCameraBridgeModal } from '../components/MobileCameraBridgeModal';
 import { compressImage, fileToDataUrl } from '../utils/imageCompressor';
@@ -289,6 +292,8 @@ export const TestWizardView: React.FC<TestWizardViewProps> = ({
 
   // Photographic Evidence
   const [photos, setPhotos] = useState<TestPhoto[]>(editingTest?.photos || []);
+  // Foto aberta no editor (girar e marcar com seta, círculo, retângulo e texto)
+  const [photoBeingEdited, setPhotoBeingEdited] = useState<TestPhoto | null>(null);
   const [photoCategory, setPhotoCategory] = useState<TestPhoto['category']>('durante');
   const [photoCaption, setPhotoCaption] = useState<string>('');
   const [isProcessingPhotos, setIsProcessingPhotos] = useState<boolean>(false);
@@ -432,7 +437,7 @@ export const TestWizardView: React.FC<TestWizardViewProps> = ({
       if (editingTest.clientId) setSelectedClientId(editingTest.clientId);
       if (editingTest.serviceOrderId) setSelectedOSId(editingTest.serviceOrderId);
       if (editingTest.technicianId) setSelectedTechnicianId(editingTest.technicianId);
-      
+
       const matchEq = eqs.find(e => e.id === editingTest.equipmentId || e.tag === editingTest.equipmentTag);
       if (matchEq) {
         setSelectedEquipment(matchEq);
@@ -630,8 +635,8 @@ export const TestWizardView: React.FC<TestWizardViewProps> = ({
     if (normsList.length === 0) return;
     const currentNorm = normsList.find(n => n.id === selectedNormId);
     if (!currentNorm || !currentNorm.applicableEquipmentTypes?.includes(selectedEquipmentType)) {
-      const effClass = selectedEquipmentType === 'ferramenta_isolada' 
-        ? '0' 
+      const effClass = selectedEquipmentType === 'ferramenta_isolada'
+        ? '0'
         : (selectedEquipmentType === 'tapete_isolante' && selectedDielectricClass === '00' ? '0' : selectedDielectricClass);
       const match = findMatchingCriterion(selectedEquipmentType, effClass, normsList);
       if (match) {
@@ -919,7 +924,7 @@ export const TestWizardView: React.FC<TestWizardViewProps> = ({
   // Equipments linked to selected OS
   const osEquipmentIds = selectedOS?.equipmentIds || [];
   const osEquipmentList = equipmentList.filter(eq => osEquipmentIds.includes(eq.id));
-  const clientEquipmentList = selectedOS?.clientId 
+  const clientEquipmentList = selectedOS?.clientId
     ? equipmentList.filter(eq => eq.clientId === selectedOS.clientId)
     : [];
 
@@ -1409,7 +1414,7 @@ export const TestWizardView: React.FC<TestWizardViewProps> = ({
                 </span>
               )}
             </div>
-            
+
             <select
               value={selectedOSId}
               onChange={(e) => {
@@ -1639,7 +1644,7 @@ export const TestWizardView: React.FC<TestWizardViewProps> = ({
                           )}
                         </div>
                         <span className={`text-[10px] block mt-0.5 leading-tight ${isSelected ? 'text-blue-100' : 'text-slate-500'}`}>
-                          {isApplicable 
+                          {isApplicable
                             ? `Fuga máx (2 luvas): ${(classEntry?.limitesFugaAC_mA[opt.value] || 0) * 2} mA (${classEntry?.limitesFugaAC_mA[opt.value]}x2)`
                             : 'Não aplicável nesta classe'}
                         </span>
@@ -1888,8 +1893,8 @@ export const TestWizardView: React.FC<TestWizardViewProps> = ({
               <div>
                 <span className="text-slate-500 block">Colaborador / Setor:</span>
                 <span className="font-semibold text-orange-700">
-                  {collaboratorName 
-                    ? `${collaboratorName}${collaboratorRegistration ? ` (Mat: ${collaboratorRegistration})` : ''}${collaboratorSector ? ` • ${collaboratorSector}` : ''}` 
+                  {collaboratorName
+                    ? `${collaboratorName}${collaboratorRegistration ? ` (Mat: ${collaboratorRegistration})` : ''}${collaboratorSector ? ` • ${collaboratorSector}` : ''}`
                     : 'Não atribuído'}
                 </span>
               </div>
@@ -2924,7 +2929,7 @@ export const TestWizardView: React.FC<TestWizardViewProps> = ({
                     )}
                   </div>
                   <p className="text-xs mt-1 text-slate-700 leading-relaxed font-medium">
-                    {currentEvaluation.result === 'PENDENTE' 
+                    {currentEvaluation.result === 'PENDENTE'
                       ? (currentEvaluation.errorMessage || 'Critério técnico não configurado. Consulte a norma/procedimento aplicável.')
                       : currentEvaluation.rationale}
                   </p>
@@ -2986,7 +2991,7 @@ export const TestWizardView: React.FC<TestWizardViewProps> = ({
             </div>
 
             {/* Selection & Controls Bar */}
-            <div 
+            <div
               onDragOver={(e) => { e.preventDefault(); setIsDraggingPhotos(true); }}
               onDragLeave={() => setIsDraggingPhotos(false)}
               onDrop={(e) => {
@@ -3137,25 +3142,25 @@ export const TestWizardView: React.FC<TestWizardViewProps> = ({
                     const badge = categoryBadges[p.category] || { label: p.category, bg: 'bg-slate-100 border-slate-300', text: 'text-slate-800' };
 
                     return (
-                      <div 
-                        key={p.id} 
+                      <div
+                        key={p.id}
                         className="relative group rounded-2xl overflow-hidden border border-slate-200 bg-white shadow-xs hover:shadow-md transition-all flex flex-col"
                       >
-                        <div 
+                        <div
                           className="relative h-32 bg-slate-900 cursor-pointer overflow-hidden"
                           onClick={() => setSelectedPhotoForDetail(p)}
                         >
-                          <img 
-                            src={p.url} 
-                            alt={p.caption} 
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
+                          <PhotoImg
+                            src={p.url}
+                            alt={p.caption}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                           />
                           <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
                             <span className="opacity-0 group-hover:opacity-100 bg-black/70 backdrop-blur-sm text-white px-2.5 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 transition-opacity">
                               <Maximize2 className="w-3 h-3" /> Ampliar
                             </span>
                           </div>
-                          
+
                           <span className={`absolute top-2 left-2 text-[9px] font-black uppercase px-2 py-0.5 rounded-full border shadow-xs ${badge.bg} ${badge.text}`}>
                             {badge.label}
                           </span>
@@ -3169,6 +3174,19 @@ export const TestWizardView: React.FC<TestWizardViewProps> = ({
                             {new Date(p.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} • {p.userName}
                           </span>
                         </div>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPhotoBeingEdited(p);
+                          }}
+                          className="absolute top-2 right-10 p-1.5 bg-blue-600/90 hover:bg-blue-600 text-white rounded-full opacity-80 hover:opacity-100 shadow-md transition-opacity cursor-pointer"
+                          title="Editar foto (girar e marcar)"
+                          aria-label="Editar foto"
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </button>
 
                         <button
                           type="button"
@@ -3204,7 +3222,22 @@ export const TestWizardView: React.FC<TestWizardViewProps> = ({
             photo={selectedPhotoForDetail}
             onClose={() => setSelectedPhotoForDetail(null)}
             onDelete={(id) => handleRemovePhoto(id)}
+            onEdit={(p) => { setSelectedPhotoForDetail(null); setPhotoBeingEdited(p); }}
           />
+
+          {/* Editor de fotos: girar e marcar */}
+          {photoBeingEdited && (
+            <PhotoEditorModal
+              src={photoBeingEdited.url}
+              title={`Editar foto — ${photoBeingEdited.caption || 'evidência do ensaio'}`}
+              onClose={() => setPhotoBeingEdited(null)}
+              onSave={(dataUrl) => {
+                const editedId = photoBeingEdited.id;
+                setPhotos(prev => prev.map(p => p.id === editedId ? { ...p, url: dataUrl, editedAt: new Date().toISOString() } : p));
+                setPhotoBeingEdited(null);
+              }}
+            />
+          )}
 
           {/* Live Camera Viewfinder Modal */}
           <LiveCameraModal
@@ -3274,7 +3307,7 @@ export const TestWizardView: React.FC<TestWizardViewProps> = ({
                   <div
                     key={inst.id}
                     onClick={() => {
-                      setSelectedInstrumentIds(prev => 
+                      setSelectedInstrumentIds(prev =>
                         isSelected ? prev.filter(id => id !== inst.id) : [...prev, inst.id]
                       );
                     }}
@@ -3387,7 +3420,7 @@ export const TestWizardView: React.FC<TestWizardViewProps> = ({
                       PARECER TÉCNICO: {currentEvaluation.result}
                     </h4>
                     <p className="text-xs text-slate-600 mt-0.5">
-                      {currentEvaluation.result === 'APROVADO' 
+                      {currentEvaluation.result === 'APROVADO'
                         ? `Serão gerados automaticamente o Laudo Técnico e o Certificado de Conformidade com validade de ${currentEvaluation.recommendedRetestMonths} meses.`
                         : currentEvaluation.result === 'PENDENTE'
                         ? 'Cálculo pendente de configuração de critério técnico normativo.'

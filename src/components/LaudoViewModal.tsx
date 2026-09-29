@@ -1,11 +1,12 @@
+import { PhotoImg } from './PhotoImg';
 import React, { useState, useEffect } from 'react';
-import { 
-  X, 
-  Download, 
-  Printer, 
-  CheckCircle2, 
-  XCircle, 
-  QrCode as QrCodeIcon, 
+import {
+  X,
+  Download,
+  Printer,
+  CheckCircle2,
+  XCircle,
+  QrCode as QrCodeIcon,
   FileText,
   Calendar,
   Building,
@@ -205,9 +206,9 @@ export const LaudoViewModal: React.FC<LaudoViewModalProps> = ({ test, isOpen, on
             <div className="flex items-center gap-3">
               {company.logoUrl ? (
                 <div className="max-h-16 max-w-[140px] flex items-center justify-center p-1 bg-white rounded-lg border border-slate-200">
-                  <img 
-                    src={company.logoUrl} 
-                    alt={company.name} 
+                  <img
+                    src={company.logoUrl}
+                    alt={company.name}
                     className="max-h-14 max-w-full object-contain"
                   />
                 </div>
@@ -428,8 +429,8 @@ export const LaudoViewModal: React.FC<LaudoViewModalProps> = ({ test, isOpen, on
                             <td className="p-2 text-center font-mono font-bold text-slate-800">{tool.quantity} un</td>
                             <td className="p-2 text-center">
                               <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                tool.visualInspection === 'nao_conforme' 
-                                  ? 'bg-red-100 text-red-800' 
+                                tool.visualInspection === 'nao_conforme'
+                                  ? 'bg-red-100 text-red-800'
                                   : 'bg-emerald-100 text-emerald-800'
                               }`}>
                                 {tool.visualInspection === 'nao_conforme' ? 'Não Conforme' : 'Conforme'}
@@ -437,8 +438,8 @@ export const LaudoViewModal: React.FC<LaudoViewModalProps> = ({ test, isOpen, on
                             </td>
                             <td className="p-2 text-center">
                               <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                tool.dielectricResult === 'nao_conforme' 
-                                  ? 'bg-red-100 text-red-800' 
+                                tool.dielectricResult === 'nao_conforme'
+                                  ? 'bg-red-100 text-red-800'
                                   : 'bg-emerald-100 text-emerald-800'
                               }`}>
                                 {tool.dielectricResult === 'nao_conforme' ? 'Disrupção' : 'Conforme'}
@@ -446,8 +447,8 @@ export const LaudoViewModal: React.FC<LaudoViewModalProps> = ({ test, isOpen, on
                             </td>
                             <td className="p-2 text-center">
                               <span className={`px-2 py-0.5 rounded font-extrabold text-[11px] inline-flex items-center gap-1 ${
-                                isAppr 
-                                  ? 'bg-emerald-600 text-white' 
+                                isAppr
+                                  ? 'bg-emerald-600 text-white'
                                   : 'bg-red-600 text-white'
                               }`}>
                                 {isAppr ? 'APROVADO' : 'REPROVADO'}
@@ -547,7 +548,7 @@ export const LaudoViewModal: React.FC<LaudoViewModalProps> = ({ test, isOpen, on
                       ).map((row) => {
                         const isRowSelected = row.classe === selectedGloveClass;
                         return (
-                          <tr 
+                          <tr
                             key={row.classe}
                             className="bg-blue-50/95 font-bold border-y-2 border-blue-500"
                           >
@@ -563,7 +564,7 @@ export const LaudoViewModal: React.FC<LaudoViewModalProps> = ({ test, isOpen, on
                             <td className="p-2 text-center border-r border-slate-200 font-mono text-blue-950 font-black">
                               {row.tensaoProvaAC_kV.toFixed(1)} kV
                             </td>
-                            
+
                             {/* 280 mm */}
                             <td className={`p-2 text-center border-r border-slate-200 ${selectedGloveLength === 280 ? 'bg-blue-100/80' : ''}`}>
                               {row.limitesFugaAC_mA[280] !== null ? (
@@ -707,8 +708,8 @@ export const LaudoViewModal: React.FC<LaudoViewModalProps> = ({ test, isOpen, on
                   <tr>
                     <td className="p-2.5">Tensão de Ensaio Aplicada</td>
                     <td className="p-2.5 font-semibold text-slate-800">
-                      {isGlove 
-                        ? `${gloveTableEntry ? gloveTableEntry.tensaoProvaAC_kV.toFixed(1) : test.appliedVoltage_kV.toFixed(1)} kV CA (Tabela 4 da ABNT NBR 16295 – Classe ${selectedGloveClass})` 
+                      {isGlove
+                        ? `${gloveTableEntry ? gloveTableEntry.tensaoProvaAC_kV.toFixed(1) : test.appliedVoltage_kV.toFixed(1)} kV CA (Tabela 4 da ABNT NBR 16295 – Classe ${selectedGloveClass})`
                         : `${test.appliedVoltage_kV} kV (${test.voltageType}) – ${normApplicableDisplay}`}
                     </td>
                     <td className="p-2.5 font-bold font-mono">{test.appliedVoltage_kV} kV {test.voltageType}</td>
@@ -717,8 +718,8 @@ export const LaudoViewModal: React.FC<LaudoViewModalProps> = ({ test, isOpen, on
                   <tr>
                     <td className="p-2.5">Tempo de Aplicação da Tensão</td>
                     <td className="p-2.5 font-semibold text-slate-800">
-                      {isGlove 
-                        ? '60 segundos contínuos (ABNT NBR 16295 / IEC 60903)' 
+                      {isGlove
+                        ? '60 segundos contínuos (ABNT NBR 16295 / IEC 60903)'
                         : `${test.applicationDurationSeconds} segundos contínuos (${normApplicableDisplay})`}
                     </td>
                     <td className="p-2.5 font-bold font-mono">{test.applicationDurationSeconds} s</td>
@@ -727,8 +728,8 @@ export const LaudoViewModal: React.FC<LaudoViewModalProps> = ({ test, isOpen, on
                   <tr>
                     <td className="p-2.5">Corrente de Fuga</td>
                     <td className="p-2.5 font-semibold text-slate-800">
-                      {isGlove 
-                        ? `Máximo ${normLeakageLimit} mA (Tabela 4 – Classe ${selectedGloveClass} / ${selectedGloveLength} mm)` 
+                      {isGlove
+                        ? `Máximo ${normLeakageLimit} mA (Tabela 4 – Classe ${selectedGloveClass} / ${selectedGloveLength} mm)`
                         : test.equipmentType === 'tapete_isolante'
                         ? `Máximo ${normLeakageLimit} mA (Limite adotado – ASTM D178-22)`
                         : test.equipmentType === 'ferramenta_isolada'
@@ -747,8 +748,8 @@ export const LaudoViewModal: React.FC<LaudoViewModalProps> = ({ test, isOpen, on
                   <tr>
                     <td className="p-2.5">Rigidez / Suportabilidade à Perfuração</td>
                     <td className="p-2.5 font-semibold text-slate-800">
-                      {isGlove 
-                        ? `Sem disrupção ou perfuração dielétrica (Tabela 4 – Tensão de Rigidez: ${gloveTableEntry ? gloveTableEntry.tensaoRigidezAC_kV.toFixed(1) + ' kV CA' : 'NBR 16295'})` 
+                      {isGlove
+                        ? `Sem disrupção ou perfuração dielétrica (Tabela 4 – Tensão de Rigidez: ${gloveTableEntry ? gloveTableEntry.tensaoRigidezAC_kV.toFixed(1) + ' kV CA' : 'NBR 16295'})`
                         : `Sem disrupção, perfuração ou centelhamento elétrico (${normApplicableDisplay})`}
                     </td>
                     <td className="p-2.5 font-bold">
@@ -799,10 +800,10 @@ export const LaudoViewModal: React.FC<LaudoViewModalProps> = ({ test, isOpen, on
                 <div key={chk.id} className="py-1.5 flex items-center justify-between">
                   <span className="text-slate-700">{chk.item}</span>
                   <span className={`font-bold px-2 py-0.5 rounded-sm ${
-                    chk.status === 'conforme' 
-                      ? 'bg-emerald-100 text-emerald-800' 
-                      : chk.status === 'nao_conforme' 
-                      ? 'bg-red-100 text-red-800' 
+                    chk.status === 'conforme'
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : chk.status === 'nao_conforme'
+                      ? 'bg-red-100 text-red-800'
                       : 'bg-slate-100 text-slate-700'
                   }`}>
                     {chk.status === 'conforme' ? 'CONFORME' : chk.status === 'nao_conforme' ? 'NÃO CONFORME' : 'N/A'}
@@ -814,7 +815,7 @@ export const LaudoViewModal: React.FC<LaudoViewModalProps> = ({ test, isOpen, on
 
           {/* Section 5: Technical Conclusion Box */}
           {(() => {
-            const hasDualOpinions = test.equipmentType === 'ferramenta_isolada' && test.isolatedTools && 
+            const hasDualOpinions = test.equipmentType === 'ferramenta_isolada' && test.isolatedTools &&
               test.isolatedTools.some(t => (t.result || 'APROVADO') === 'APROVADO' && t.visualInspection !== 'nao_conforme' && t.dielectricResult !== 'nao_conforme') &&
               test.isolatedTools.some(t => t.result === 'REPROVADO' || t.visualInspection === 'nao_conforme' || t.dielectricResult === 'nao_conforme');
 
@@ -842,7 +843,7 @@ export const LaudoViewModal: React.FC<LaudoViewModalProps> = ({ test, isOpen, on
                           </h4>
                         </div>
                         <p className="text-xs text-slate-700 mt-2 leading-relaxed">
-                          {test.approvedOpinion || 
+                          {test.approvedOpinion ||
                             `As ${approvedToolsList.length} ferramenta(s) aprovadas foram ensaiadas individualmente a 10.000 V CA por 180s (NBR 9699 / IEC 60900), apresentando plena integridade da isolação e suportabilidade dielétrica sem perfuração.`}
                         </p>
                         <div className="mt-2.5 pt-2 border-t border-emerald-200">
@@ -875,7 +876,7 @@ export const LaudoViewModal: React.FC<LaudoViewModalProps> = ({ test, isOpen, on
                           </h4>
                         </div>
                         <p className="text-xs text-slate-700 mt-2 leading-relaxed">
-                          {test.reprovedOpinion || 
+                          {test.reprovedOpinion ||
                             `As ${reprovedToolsList.length} ferramenta(s) reprovadas NÃO atenderam aos critérios da NBR 9699 / IEC 60900. Determinada segregação imediata, etiquetação vermelha de condenação e inutilização/descarte compulsório.`}
                         </p>
                         <div className="mt-2.5 pt-2 border-t border-red-200">
@@ -904,8 +905,8 @@ export const LaudoViewModal: React.FC<LaudoViewModalProps> = ({ test, isOpen, on
 
             return (
               <div className={`p-4 rounded-xl border-2 break-inside-avoid print:break-inside-avoid ${
-                isApproved 
-                  ? 'bg-emerald-50/80 border-emerald-500' 
+                isApproved
+                  ? 'bg-emerald-50/80 border-emerald-500'
                   : 'bg-red-50/80 border-red-500'
               }`}>
                 <div className="flex items-center gap-2">
@@ -1023,10 +1024,10 @@ export const LaudoViewModal: React.FC<LaudoViewModalProps> = ({ test, isOpen, on
                         </span>
                       </div>
                       <div className="h-48 print:h-64 bg-slate-900 overflow-hidden flex items-center justify-center shrink-0">
-                        <img 
-                          src={ph.url} 
-                          alt={ph.caption} 
-                          className="w-full h-full object-contain bg-slate-950 hover:scale-105 transition-transform duration-200" 
+                        <PhotoImg
+                          src={ph.url}
+                          alt={ph.caption}
+                          className="w-full h-full object-contain bg-slate-950 hover:scale-105 transition-transform duration-200"
                         />
                       </div>
                       <div className="p-3 text-xs text-slate-700 flex-1 flex flex-col justify-between space-y-2">

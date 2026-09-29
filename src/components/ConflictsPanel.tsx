@@ -21,7 +21,7 @@ function formatValue(value: unknown): string {
   if (typeof value === 'boolean') return value ? 'Sim' : 'Não';
   if (typeof value === 'object') return Array.isArray(value) ? `${value.length} item(ns)` : '(dados detalhados)';
   const text = String(value);
-  if (text.startsWith('data:')) return '(imagem)';
+  if (text.startsWith('data:') || text.startsWith('jvm-foto:')) return '(imagem)';
   return text.length > 80 ? text.slice(0, 77) + '…' : text;
 }
 

@@ -1,18 +1,32 @@
-import React from 'react';
-import { X, Trash2, Calendar, User, Tag, MapPin, Download } from 'lucide-react';
+import { PhotoImg } from './PhotoImg';
+import React, { useEffect, useState } from 'react';
+import { X, Trash2, Calendar, User, Tag, MapPin, Download, Pencil } from 'lucide-react';
+import { resolvePhotoUrl } from '../services/photoStore';
 import { TestPhoto } from '../types';
 
 interface PhotoDetailModalProps {
   photo: TestPhoto | null;
   onClose: () => void;
   onDelete?: (photoId: string) => void;
+  /** Abre o editor (girar e marcar). */
+  onEdit?: (photo: TestPhoto) => void;
 }
 
 export const PhotoDetailModal: React.FC<PhotoDetailModalProps> = ({
   photo,
   onClose,
-  onDelete
+  onDelete,
+  onEdit
 }) => {
+  // Endereço para download (fotos guardadas à parte no aparelho são resolvidas)
+  const [downloadUrl, setDownloadUrl] = useState('');
+  useEffect(() => {
+    let cancelled = false;
+    setDownloadUrl('');
+    if (photo?.url) resolvePhotoUrl(photo.url).then(u => { if (!cancelled) setDownloadUrl(u); });
+    return () => { cancelled = true; };
+  }, [photo?.url]);
+
   if (!photo) return null;
 
   const categoryLabels: Record<TestPhoto['category'], { label: string; color: string }> = {
@@ -40,8 +54,19 @@ export const PhotoDetailModal: React.FC<PhotoDetailModalProps> = ({
 
           <div className="flex items-center gap-2">
             {/* Download */}
+            {onEdit && (
+              <button
+                type="button"
+                onClick={() => onEdit(photo)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors cursor-pointer"
+                title="Girar e marcar a foto"
+              >
+                <Pencil className="w-4 h-4" /> Editar
+              </button>
+            )}
+
             <a
-              href={photo.url}
+              href={downloadUrl || undefined}
               download={`foto-ensaio-${photo.category}-${photo.id}.jpg`}
               className="p-2 text-slate-400 hover:text-white bg-slate-800 rounded-xl transition-colors"
               title="Baixar Foto"
@@ -77,7 +102,7 @@ export const PhotoDetailModal: React.FC<PhotoDetailModalProps> = ({
 
         {/* Image Display */}
         <div className="bg-black/90 flex-1 flex items-center justify-center p-2 sm:p-4 overflow-hidden min-h-[260px] max-h-[60vh]">
-          <img
+          <PhotoImg
             src={photo.url}
             alt={photo.caption}
             className="max-h-full max-w-full object-contain rounded-xl shadow-lg"

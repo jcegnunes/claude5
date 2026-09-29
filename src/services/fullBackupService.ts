@@ -1,16 +1,18 @@
+import { getPhotoBlob, PHOTO_REF_PREFIX } from './photoStore';
+import { inlineTestPhotos } from './photoExternalizer';
 import JSZip from 'jszip';
 import { DielectricStorageService } from './syncEngine';
 import { saveFileLocally } from '../utils/nativeFileSaver';
-import { 
-  TestRecord, 
-  Equipment, 
-  Client, 
-  ServiceOrder, 
-  LabInstrument, 
-  NormCriterion, 
-  User, 
-  AuditLog, 
-  CompanyLabInfo 
+import {
+  TestRecord,
+  Equipment,
+  Client,
+  ServiceOrder,
+  LabInstrument,
+  NormCriterion,
+  User,
+  AuditLog,
+  CompanyLabInfo
 } from '../types';
 
 export interface PhotoBackupItem {
@@ -85,12 +87,21 @@ async function fetchImageBinary(url: string): Promise<{ data: Uint8Array; extens
   if (!url || typeof url !== 'string') return null;
 
   try {
+    // Foto guardada no aparelho (referência local)
+    if (url.startsWith(PHOTO_REF_PREFIX)) {
+      const blob = await getPhotoBlob(url);
+      if (!blob) return null;
+      const mimeType = blob.type || 'image/jpeg';
+      const extension = mimeType.includes('png') ? 'png' : mimeType.includes('webp') ? 'webp' : 'jpg';
+      return { data: new Uint8Array(await blob.arrayBuffer()), extension, mimeType };
+    }
+
     if (url.startsWith('data:')) {
       const parts = url.split(',');
       const mimeMatch = parts[0].match(/data:(.*?);base64/);
       const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
       const base64Str = parts[1] || '';
-      
+
       const byteCharacters = atob(base64Str);
       const byteNumbers = new Array(byteCharacters.length);
       for (let i = 0; i < byteCharacters.length; i++) {
@@ -647,8 +658,9 @@ JVM Engenharia • Laboratório de Ensaios Dielétricos em EPIs e EPCs (NR-10)
     const auditLogs = DielectricStorageService.getAuditLogs();
     const company = DielectricStorageService.getCompanyInfo();
 
+    // Fotos guardadas no aparelho vão embutidas no arquivo de backup
     const sanitizedTests = includePhotos
-      ? tests
+      ? await Promise.all(tests.map(t => inlineTestPhotos(t)))
       : tests.map((t) => ({
           ...t,
           photos: [],
@@ -790,8 +802,8 @@ JVM Engenharia • Laboratório de Ensaios Dielétricos em EPIs e EPCs (NR-10)
     let photosRestoredCount = 0;
 
     // Check photos folder in ZIP
-    const photoFiles = Object.keys(zip.files).filter((k) => 
-      !zip.files[k].dir && 
+    const photoFiles = Object.keys(zip.files).filter((k) =>
+      !zip.files[k].dir &&
       (k.startsWith('registros_fotograficos') || k.startsWith('fotos') || k.startsWith('oscilogramas'))
     );
 

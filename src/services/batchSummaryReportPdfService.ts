@@ -1,3 +1,4 @@
+import { getPhotoDataUrl, isLocalPhotoRef } from './photoStore';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { TestRecord, Client, CompanyLabInfo } from '../types';
@@ -11,6 +12,8 @@ import { cleanSignatureImage } from '../utils/signatureCleaner';
 async function loadImageAsDataUrl(url: string): Promise<string> {
   if (!url) return '';
   if (url.startsWith('data:image/')) return url;
+  // Foto guardada no aparelho (referência local): lida só agora
+  if (isLocalPhotoRef(url)) return getPhotoDataUrl(url);
   return new Promise((resolve) => {
     const img = new Image();
     img.crossOrigin = 'Anonymous';
@@ -79,15 +82,15 @@ export async function exportTestsSummaryReportPDF(
   // 1. Identificar dados do cliente
   const primaryClientId = selectedTests[0].clientId;
   const matchedClient = clients.find(c => c.id === primaryClientId || c.razaoSocial === selectedTests[0].clientName);
-  
+
   const clientName = matchedClient?.razaoSocial || selectedTests[0].clientName || 'Cliente Geral';
   const clientFantasy = matchedClient?.nomeFantasia || '';
   const clientCnpj = matchedClient?.cnpj || 'Não informado';
   const clientIE = matchedClient?.inscricaoEstadual || 'Isento / Não informado';
-  const clientAddress = matchedClient 
+  const clientAddress = matchedClient
     ? `${matchedClient.endereco}, ${matchedClient.numero}${matchedClient.complemento ? ' - ' + matchedClient.complemento : ''} - ${matchedClient.bairro}, ${matchedClient.cidade}/${matchedClient.estado} - CEP: ${matchedClient.cep}`
     : 'Conforme cadastro do cliente';
-  const clientContact = matchedClient?.responsavel 
+  const clientContact = matchedClient?.responsavel
     ? `${matchedClient.responsavel} (${matchedClient.cargoResponsavel || 'Responsável'})`
     : 'Setor de Segurança do Trabalho / Manutenção';
   const clientPhone = matchedClient?.telefone || matchedClient?.whatsapp || 'Não informado';
@@ -174,7 +177,7 @@ export async function exportTestsSummaryReportPDF(
 
   // Bloco Central de Títulos e Identificação (Área: margin + 35 até margin + 225)
   const textStartX = margin + 35;
-  
+
   // Linha 1: Título Principal do Relatório
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9.5);
@@ -612,7 +615,7 @@ export async function exportTestsSummaryReportPDF(
   const techTitle = company.technicalResponsible?.title || 'Responsável Técnico';
   const creaNum = customOptions?.techResponsibleCrea || company.technicalResponsible?.creaNumber || company.creaCompanyRegister || 'N/A';
   const rnpNum = customOptions?.techResponsibleRnp || company.technicalResponsible?.rnp;
-  
+
   // Nome do Responsável Técnico
   doc.text(techName, signCenterX, rtSigLineY + 3.8, { align: 'center' });
 

@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  ShieldCheck, 
-  Wifi, 
-  WifiOff, 
-  RefreshCw, 
-  QrCode, 
-  Smartphone, 
-  Monitor, 
-  UserCircle, 
-  Check, 
+import {
+  ShieldCheck,
+  Wifi,
+  WifiOff,
+  RefreshCw,
+  QrCode,
+  Smartphone,
+  Monitor,
+  UserCircle,
+  Check,
   ChevronDown,
   Bell,
   HardDrive,
@@ -58,7 +58,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [companyDropdownOpen, setCompanyDropdownOpen] = useState(false);
-  
+
   const [companies, setCompanies] = useState<Company[]>(() => DielectricStorageService.getCompanies());
   const [activeCompany, setActiveCompany] = useState<Company>(() => DielectricStorageService.getActiveCompany());
   const [users, setUsers] = useState<User[]>(() => DielectricStorageService.getUsers());
@@ -80,7 +80,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     DielectricStorageService.setActiveCompany(comp);
     setActiveCompany(comp);
     setCompanyDropdownOpen(false);
-    
+
     // Also update current user's company context if needed
     if (currentUser.isMasterAdmin) {
       const updatedUser: User = {
@@ -96,33 +96,33 @@ export const Navbar: React.FC<NavbarProps> = ({
     <header className="bg-[#0A2540] text-white border-b border-slate-800 sticky top-0 z-40 shadow-md">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          
+
           {/* Logo & Active Company Info */}
-          <div className="flex items-center gap-3 cursor-pointer" onClick={() => onNavigate('dashboard')}>
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 mr-2 cursor-pointer" onClick={() => onNavigate('dashboard')}>
             {activeCompany.logoUrl ? (
-              <div className="h-10 max-w-[120px] flex items-center justify-center rounded-xl bg-white/10 p-1 border border-white/15">
-                <img 
-                  src={activeCompany.logoUrl} 
-                  alt={activeCompany.name} 
+              <div className="h-10 max-w-[120px] shrink-0 flex items-center justify-center rounded-xl bg-white/10 p-1 border border-white/15">
+                <img
+                  src={activeCompany.logoUrl}
+                  alt={activeCompany.name}
                   className="max-h-full max-w-full object-contain"
                 />
               </div>
             ) : (
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center shadow-md font-black text-white text-lg tracking-tighter">
+              <div className="w-10 h-10 shrink-0 rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center shadow-md font-black text-white text-lg tracking-tighter">
                 {activeCompany.name ? activeCompany.name.slice(0, 3).toUpperCase() : 'LAB'}
               </div>
             )}
-            
+
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="font-extrabold text-sm sm:text-base tracking-tight text-white uppercase truncate max-w-[160px] sm:max-w-[260px]">
+                <span className="font-extrabold text-sm sm:text-base tracking-tight text-white uppercase truncate min-w-0 sm:max-w-[260px]">
                   {activeCompany.name || 'LABORATÓRIO DIELÉTRICO'}
                 </span>
-                <span className="text-[10px] uppercase font-bold tracking-widest px-1.5 py-0.5 rounded-sm bg-orange-500/20 text-orange-400 border border-orange-500/30 shrink-0">
+                <span className="hidden min-[360px]:inline text-[10px] uppercase font-bold tracking-widest px-1.5 py-0.5 rounded-sm bg-orange-500/20 text-orange-400 border border-orange-500/30 shrink-0">
                   NR-10
                 </span>
               </div>
-              <p className="text-[11px] text-slate-300 font-medium truncate max-w-[180px] sm:max-w-[300px]">
+              <p className="text-[11px] text-slate-300 font-medium truncate sm:max-w-[300px]">
                 {activeCompany.cnpj ? `CNPJ: ${activeCompany.cnpj}` : 'Laboratório de Ensaios & Certificação'}
               </p>
             </div>
@@ -130,7 +130,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Center Action Toolbar */}
           <div className="hidden lg:flex items-center gap-2">
-            
+
             {/* Multi-Company Dropdown Selector */}
             <div className="relative">
               <button
@@ -249,13 +249,13 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
 
           {/* Right: User Profile & Quick Multi-User / Logout Dropdown */}
-          <div className="relative">
+          <div className="relative shrink-0">
             <button
               onClick={() => {
                 setUserDropdownOpen(!userDropdownOpen);
                 setCompanyDropdownOpen(false);
               }}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 transition-colors cursor-pointer"
+              className="flex items-center gap-1 sm:gap-2 px-1.5 sm:px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 transition-colors cursor-pointer"
             >
               <div className="w-8 h-8 rounded-lg bg-orange-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
                 {currentUser.name ? currentUser.name.split(' ').map(n => n[0]).slice(0, 2).join('') : 'U'}
@@ -279,7 +279,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* User Dropdown */}
             {userDropdownOpen && (
               <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-slate-200 py-2 z-50 text-slate-800 animate-in fade-in">
-                
+
                 {/* User Card Header */}
                 <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/50">
                   <p className="text-xs font-bold text-slate-900">{currentUser.name}</p>

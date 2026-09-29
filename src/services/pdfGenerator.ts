@@ -1,3 +1,4 @@
+import { getPhotoDataUrl, isLocalPhotoRef } from './photoStore';
 import jsPDF from 'jspdf';
 import QRCode from 'qrcode';
 import { TestRecord, CompanyLabInfo } from '../types';
@@ -13,6 +14,8 @@ import { cleanSignatureImage } from '../utils/signatureCleaner';
 export async function loadImageAsDataUrl(url: string): Promise<string> {
   if (!url) return '';
   if (url.startsWith('data:image/')) return url;
+  // Foto guardada no aparelho (referência local): lida só agora
+  if (isLocalPhotoRef(url)) return getPhotoDataUrl(url);
   return new Promise((resolve) => {
     const img = new Image();
     img.crossOrigin = 'Anonymous';
@@ -63,7 +66,7 @@ export async function generateQRCodeDataUrl(text: string): Promise<string> {
 export function formatToolDisplayName(name?: string, type?: string): string {
   if (!name && !type) return 'Ferramenta Manual Isolada 1000V';
   const raw = (name || type || '').trim();
-  
+
   const presetMap: Record<string, string> = {
     arco_serra_isolado: 'Chave Arco Serra com Cabo Isolado',
     chave_ajustavel: 'Chave Isolada Tipo Ajustável',
@@ -138,9 +141,9 @@ export function formatEquipmentType(type?: string, customName?: string): string 
 }
 
 export async function renderLaudoToDoc(
-  doc: jsPDF, 
-  test: TestRecord, 
-  company: CompanyLabInfo, 
+  doc: jsPDF,
+  test: TestRecord,
+  company: CompanyLabInfo,
   logoDataUrl: string | null,
   isFirstPageInDoc: boolean = true
 ): Promise<void> {
@@ -211,7 +214,7 @@ export async function renderLaudoToDoc(
   const cleanedTechSig = rawTechSig ? await cleanSignatureImage(rawTechSig) : '';
   const cleanedRTSig = rawRTSig ? await cleanSignatureImage(rawRTSig) : '';
 
-  const technicianSigUrl = cleanedTechSig 
+  const technicianSigUrl = cleanedTechSig
     ? await loadImageAsDataUrl(cleanedTechSig)
     : '';
 
@@ -229,7 +232,7 @@ export async function renderLaudoToDoc(
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7.0);
     doc.text(`${company.name.toUpperCase()} • LAUDO TÉCNICO Nº ${test.reportNumber} • OS: ${test.serviceOrderNumber}`, margin + 3, y + 3.8);
-    
+
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(6.5);
     doc.text(`TAG: ${test.equipmentTag} (${formatEquipmentType(test.equipmentType)})`, pageWidth - margin - 3, y + 3.8, { align: 'right' });
@@ -285,7 +288,7 @@ export async function renderLaudoToDoc(
   }
 
   const textLeftX = logoDataUrl ? margin + 27 : margin + 21;
-  
+
   // Nome da Empresa
   doc.setTextColor(primaryNavy[0], primaryNavy[1], primaryNavy[2]);
   doc.setFont('helvetica', 'bold');
@@ -882,24 +885,24 @@ export async function renderLaudoToDoc(
   }> = [
     {
       param: 'Tensão de Ensaio Aplicada',
-      norm: isGlove 
-        ? `${gloveTableEntry ? gloveTableEntry.tensaoProvaAC_kV.toFixed(1) : test.appliedVoltage_kV.toFixed(1)} kV CA (Tab. 4 - Cl. ${selectedGloveClass})` 
+      norm: isGlove
+        ? `${gloveTableEntry ? gloveTableEntry.tensaoProvaAC_kV.toFixed(1) : test.appliedVoltage_kV.toFixed(1)} kV CA (Tab. 4 - Cl. ${selectedGloveClass})`
         : `${test.appliedVoltage_kV} kV (${test.voltageType}) – ${normApplicableDisplay}`,
       measured: `${test.appliedVoltage_kV} kV ${test.voltageType}`,
       isConforming: true
     },
     {
       param: 'Tempo de Aplicação da Tensão',
-      norm: isGlove 
-        ? '60 segundos contínuos (ABNT NBR 16295 / IEC 60903)' 
+      norm: isGlove
+        ? '60 segundos contínuos (ABNT NBR 16295 / IEC 60903)'
         : `${test.applicationDurationSeconds} segundos contínuos (${normApplicableDisplay})`,
       measured: `${test.applicationDurationSeconds} s`,
       isConforming: true
     },
     {
       param: 'Corrente de Fuga',
-      norm: isGlove 
-        ? `Máximo ${normLeakageLimit} mA (Tab. 4 - Cl. ${selectedGloveClass} / ${selectedGloveLength} mm)` 
+      norm: isGlove
+        ? `Máximo ${normLeakageLimit} mA (Tab. 4 - Cl. ${selectedGloveClass} / ${selectedGloveLength} mm)`
         : test.equipmentType === 'tapete_isolante'
         ? `Máximo ${normLeakageLimit} mA (Limite adotado – ASTM D178-22)`
         : test.equipmentType === 'ferramenta_isolada'
@@ -910,8 +913,8 @@ export async function renderLaudoToDoc(
     },
     {
       param: 'Rigidez / Suportabilidade à Perfuração',
-      norm: isGlove 
-        ? `Sem disrupção (Tab. 4 - Rigidez: ${gloveTableEntry ? gloveTableEntry.tensaoRigidezAC_kV.toFixed(1) + ' kV CA' : 'NBR 16295'})` 
+      norm: isGlove
+        ? `Sem disrupção (Tab. 4 - Rigidez: ${gloveTableEntry ? gloveTableEntry.tensaoRigidezAC_kV.toFixed(1) + ' kV CA' : 'NBR 16295'})`
         : `Sem disrupção, perfuração ou centelhamento (${normApplicableDisplay})`,
       measured: test.withstandWithoutPuncture ? 'Sem perfuração dielétrica' : 'Ocorreu disrupção',
       isConforming: test.withstandWithoutPuncture
@@ -1021,7 +1024,7 @@ export async function renderLaudoToDoc(
   y += vTotalCardHeight + 2.0;
 
   // ================= SEÇÃO 5: PARECER TÉCNICO CONCLUSIVO =================
-  const hasDualOpinions = test.equipmentType === 'ferramenta_isolada' && test.isolatedTools && 
+  const hasDualOpinions = test.equipmentType === 'ferramenta_isolada' && test.isolatedTools &&
     test.isolatedTools.some(t => (t.result || 'APROVADO') === 'APROVADO' && t.visualInspection !== 'nao_conforme' && t.dielectricResult !== 'nao_conforme') &&
     test.isolatedTools.some(t => t.result === 'REPROVADO' || t.visualInspection === 'nao_conforme' || t.dielectricResult === 'nao_conforme');
 
@@ -1034,7 +1037,7 @@ export async function renderLaudoToDoc(
     // Parecer 1: Aprovadas text & tools listing
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(5.5);
-    const approvedText = test.approvedOpinion || 
+    const approvedText = test.approvedOpinion ||
       `As ${approvedToolsList.length} ferramenta(s) aprovadas foram ensaiadas individualmente a 10.000 V CA por 180s (NBR 9699 / IEC 60900), apresentando plena integridade da isolação e suportabilidade dielétrica sem perfuração.`;
     const splitApproved = doc.splitTextToSize(approvedText, boxW - 6);
 
@@ -1042,7 +1045,7 @@ export async function renderLaudoToDoc(
     const splitApprovedItems = doc.splitTextToSize(approvedItemsSummary, boxW - 6);
 
     // Parecer 2: Reprovadas text & tools listing
-    const reprovedText = test.reprovedOpinion || 
+    const reprovedText = test.reprovedOpinion ||
       `As ${reprovedToolsList.length} ferramenta(s) reprovadas NÃO atenderam aos critérios da NBR 9699 / IEC 60900. Determinada segregação imediata, etiqueta vermelha e descarte/destruição compulsória conforme NR-10.`;
     const splitReproved = doc.splitTextToSize(reprovedText, boxW - 6);
 
@@ -1144,7 +1147,7 @@ export async function renderLaudoToDoc(
     doc.setFontSize(5.8);
 
     let baseRationale = test.resultRationale || 'Equipamento ensaiado e aprovado em conformidade com as exigências normativas aplicáveis.';
-    
+
     // Se for ferramenta isolada com lista de ferramentas, adicionar detalhamento de itens
     let toolItemsText = '';
     if (test.equipmentType === 'ferramenta_isolada' && test.isolatedTools && test.isolatedTools.length > 0) {
@@ -1329,7 +1332,7 @@ export async function renderLaudoToDoc(
 
       const pageNumForPhotos = Math.floor(pageBatchIdx / 4) + 1;
       const totalPhotoPages = Math.ceil(loadedPhotos.length / 4);
-      const headerSubtitle = totalPhotoPages > 1 
+      const headerSubtitle = totalPhotoPages > 1
         ? `Fotos ${pageBatchIdx + 1} a ${Math.min(pageBatchIdx + 4, loadedPhotos.length)} de ${loadedPhotos.length} (Anexo ${pageNumForPhotos}/${totalPhotoPages})`
         : `${loadedPhotos.length} registro(s) anexado(s)`;
 
@@ -1574,7 +1577,7 @@ export async function renderCertificadoToDoc(
   doc.setTextColor(40, 40, 40);
   doc.setFont('helvetica', 'normal');
 
-  const approvalStatement = company.certificateEmissionSettings?.defaultApprovalText || 
+  const approvalStatement = company.certificateEmissionSettings?.defaultApprovalText ||
     'Certificamos que o equipamento abaixo discriminado foi submetido a ensaio dielétrico de rotina / periódico em estrita conformidade com as normas técnicas da ABNT, IEC e diretrizes da NR-10:';
   const splitApproval = doc.splitTextToSize(approvalStatement, contentWidth - 20);
   doc.text(splitApproval, margin + 10, y);
@@ -1596,7 +1599,7 @@ export async function renderCertificadoToDoc(
 
   doc.setFont('helvetica', 'normal');
   doc.text(`${test.clientName}`, margin + 40, y + 6);
-  
+
   let equipDescription = `${formatEquipmentType(test.equipmentType)} (Classe ${test.equipmentClass}) - CA: ${test.equipmentCa || 'N/A'}`;
   if (test.equipmentType === 'luva_isolante') {
     equipDescription = `LUVA ISOLANTE NBR 16295 Cl ${test.equipmentClass} (${test.gloveLength_mm || 360}mm) - CA: ${test.equipmentCa || 'N/A'}`;
@@ -1707,7 +1710,7 @@ export async function exportCertificadoPDF(test: TestRecord, company: CompanyLab
  * Emite múltiplos laudos técnicos consolidados em um único arquivo PDF
  */
 export async function exportMultipleLaudosCombinedPDF(
-  tests: TestRecord[], 
+  tests: TestRecord[],
   company: CompanyLabInfo,
   onProgress?: (current: number, total: number, message: string) => void
 ): Promise<void> {
@@ -1739,7 +1742,7 @@ export async function exportMultipleLaudosCombinedPDF(
  * Emite múltiplos certificados de conformidade consolidados em um único arquivo PDF
  */
 export async function exportMultipleCertificadosCombinedPDF(
-  tests: TestRecord[], 
+  tests: TestRecord[],
   company: CompanyLabInfo,
   onProgress?: (current: number, total: number, message: string) => void
 ): Promise<void> {
@@ -1774,7 +1777,7 @@ export async function exportMultipleCertificadosCombinedPDF(
  * Baixa múltiplos laudos técnicos como arquivos individuais (.pdf)
  */
 export async function exportMultipleLaudosIndividualPDF(
-  tests: TestRecord[], 
+  tests: TestRecord[],
   company: CompanyLabInfo,
   onProgress?: (current: number, total: number, message: string) => void
 ): Promise<void> {
@@ -1794,7 +1797,7 @@ export async function exportMultipleLaudosIndividualPDF(
  * Baixa múltiplos certificados como arquivos individuais (.pdf)
  */
 export async function exportMultipleCertificadosIndividualPDF(
-  tests: TestRecord[], 
+  tests: TestRecord[],
   company: CompanyLabInfo,
   onProgress?: (current: number, total: number, message: string) => void
 ): Promise<void> {
