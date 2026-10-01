@@ -3223,6 +3223,12 @@ export const TestWizardView: React.FC<TestWizardViewProps> = ({
             onClose={() => setSelectedPhotoForDetail(null)}
             onDelete={(id) => handleRemovePhoto(id)}
             onEdit={(p) => { setSelectedPhotoForDetail(null); setPhotoBeingEdited(p); }}
+            onRestoreOriginal={(p) => {
+              if (!p.originalUrl) return;
+              if (!window.confirm('Restaurar a foto original? As marcações e o giro serão descartados.')) return;
+              setPhotos(prev => prev.map(x => x.id === p.id ? { ...x, url: p.originalUrl!, originalUrl: undefined, editedAt: undefined } : x));
+              setSelectedPhotoForDetail(null);
+            }}
           />
 
           {/* Editor de fotos: girar e marcar */}
@@ -3233,7 +3239,9 @@ export const TestWizardView: React.FC<TestWizardViewProps> = ({
               onClose={() => setPhotoBeingEdited(null)}
               onSave={(dataUrl) => {
                 const editedId = photoBeingEdited.id;
-                setPhotos(prev => prev.map(p => p.id === editedId ? { ...p, url: dataUrl, editedAt: new Date().toISOString() } : p));
+                setPhotos(prev => prev.map(p => p.id === editedId
+                  ? { ...p, url: dataUrl, originalUrl: p.originalUrl || p.url, editedAt: new Date().toISOString() }
+                  : p));
                 setPhotoBeingEdited(null);
               }}
             />

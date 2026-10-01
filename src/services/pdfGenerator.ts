@@ -1,3 +1,4 @@
+import { hardenPdfText } from '../utils/safePdf';
 import { getPhotoDataUrl, isLocalPhotoRef } from './photoStore';
 import jsPDF from 'jspdf';
 import QRCode from 'qrcode';
@@ -147,6 +148,7 @@ export async function renderLaudoToDoc(
   logoDataUrl: string | null,
   isFirstPageInDoc: boolean = true
 ): Promise<void> {
+  hardenPdfText(doc);
   const pageWidth = 210;
   const pageHeight = 297;
   const margin = 9;
@@ -669,7 +671,7 @@ export async function renderLaudoToDoc(
   doc.setTextColor(textDark[0], textDark[1], textDark[2]);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(6.8);
-  doc.text(`${test.environmental.temperatureC}°C`, margin + 125, y + 7.5);
+  doc.text(test.environmental?.temperatureC != null ? `${test.environmental.temperatureC}°C` : 'N/I', margin + 125, y + 7.5);
 
   // Umidade
   doc.setTextColor(textMuted[0], textMuted[1], textMuted[2]);
@@ -679,7 +681,7 @@ export async function renderLaudoToDoc(
   doc.setTextColor(textDark[0], textDark[1], textDark[2]);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(6.8);
-  doc.text(`${test.environmental.relativeHumidityPercent}% UR`, margin + 158, y + 7.5);
+  doc.text(test.environmental?.relativeHumidityPercent != null ? `${test.environmental.relativeHumidityPercent}% UR` : 'N/I', margin + 158, y + 7.5);
 
   y += 12.0;
 
@@ -1500,6 +1502,7 @@ export async function exportLaudoPDF(test: TestRecord, company: CompanyLabInfo):
     unit: 'mm',
     format: 'a4'
   });
+  hardenPdfText(doc);
   const logoDataUrl = company.logoUrl ? await loadImageAsDataUrl(company.logoUrl) : null;
   await renderLaudoToDoc(doc, test, company, logoDataUrl, true);
   const filename = generateLaudoFileName(test);
@@ -1513,6 +1516,7 @@ export async function renderCertificadoToDoc(
   logoDataUrl: string | null,
   isFirstPageInDoc: boolean = true
 ): Promise<void> {
+  hardenPdfText(doc);
   const pageWidth = 210;
   const pageHeight = 148;
   const margin = 10;
@@ -1700,6 +1704,7 @@ export async function exportCertificadoPDF(test: TestRecord, company: CompanyLab
     unit: 'mm',
     format: 'a5' // 210 x 148 mm
   });
+  hardenPdfText(doc);
   const logoDataUrl = company.logoUrl ? await loadImageAsDataUrl(company.logoUrl) : null;
   await renderCertificadoToDoc(doc, test, company, logoDataUrl, true);
   const filename = generateCertificadoFileName(test);
@@ -1721,6 +1726,7 @@ export async function exportMultipleLaudosCombinedPDF(
     unit: 'mm',
     format: 'a4'
   });
+  hardenPdfText(doc);
 
   const logoDataUrl = company.logoUrl ? await loadImageAsDataUrl(company.logoUrl) : null;
   const total = tests.length;
@@ -1756,6 +1762,7 @@ export async function exportMultipleCertificadosCombinedPDF(
     unit: 'mm',
     format: 'a5'
   });
+  hardenPdfText(doc);
 
   const logoDataUrl = company.logoUrl ? await loadImageAsDataUrl(company.logoUrl) : null;
   const total = approvedTests.length;
@@ -1831,6 +1838,7 @@ export async function exportMultipleEtiquetasPDF(
     unit: 'mm',
     format: [60, 40] // Formato padrão de etiqueta térmica 60x40mm
   });
+  hardenPdfText(doc);
 
   const total = tests.length;
 

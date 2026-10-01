@@ -464,6 +464,7 @@ export const ReportEmissionView: React.FC<ReportEmissionViewProps> = ({
       });
     } catch (err: any) {
       console.error('Erro ao gerar PDF do relatório:', err);
+      alert(`Não foi possível gerar o PDF do relatório: ${(err as any)?.message || err}`);
       setToastMessage({
         type: 'error',
         text: 'Erro na geração do PDF. Verifique os dados e tente novamente.'

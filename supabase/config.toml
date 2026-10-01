@@ -24,8 +24,8 @@ max_client_conn = 100
 
 [auth]
 enabled = true
-site_url = "https://cdtbzbshylrcprvmjpgc.supabase.co"
-additional_redirect_urls = ["https://localhost:3000"]
+site_url = "https://jvmlab.com.br"
+additional_redirect_urls = ["https://jvmlab.com.br", "http://localhost:3000"]
 jwt_expiry = 3600
 enable_signup = false
 

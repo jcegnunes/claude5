@@ -251,7 +251,7 @@ export const AndroidInstallModal: React.FC<AndroidInstallModalProps> = ({
                       type="url"
                       value={customServerUrl}
                       onChange={(e) => setCustomServerUrl(e.target.value)}
-                      placeholder="https://sua-plataforma-online.com"
+                      placeholder="https://jvmlab.com.br"
                       className="flex-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white font-mono placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
                     />
                     <div className="flex gap-1.5">

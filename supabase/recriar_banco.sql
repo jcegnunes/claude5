@@ -1336,6 +1336,9 @@ GRANT EXECUTE ON FUNCTION public.jvm_me() TO authenticated;
 -- Portal público /validar/CODIGO: devolve UM ensaio pelo código de validação
 -- (o código aleatório impresso no QR Code). Números de laudo/certificado são
 -- sequenciais e por isso NÃO são aceitos aqui.
+-- Só os campos do CERTIFICADO saem do banco (LGPD): fotos, dados do
+-- colaborador, assinaturas do técnico/cliente, medições detalhadas e
+-- observações internas ficam restritos a quem tem login na empresa.
 CREATE OR REPLACE FUNCTION public.jvm_validar_certificado(p_code TEXT)
 RETURNS JSON
 LANGUAGE plpgsql
@@ -1346,6 +1349,15 @@ DECLARE
   v_code TEXT := upper(trim(COALESCE(p_code, '')));
   t public.test_records%ROWTYPE;
   c public.companies%ROWTYPE;
+  v_public_keys TEXT[] := ARRAY[
+    'id', 'uuid', 'companyId', 'companyName', 'testNumber', 'reportNumber', 'certificateNumber',
+    'validationCode', 'clientName', 'equipmentTag', 'equipmentType', 'equipmentClass',
+    'equipmentSerial', 'equipmentCa', 'testDate', 'normCode', 'appliedClass', 'appliedVoltage_kV',
+    'voltageType', 'applicationDurationSeconds', 'result', 'retestDueDate', 'techResponsibleId',
+    'techResponsibleName', 'techResponsibleCrea', 'gloveLength_mm', 'blanketType', 'blanketStyle',
+    'blanketDimensions', 'mattingSurface', 'mattingThickness_mm', 'isolatedTools'
+  ];
+  v_payload JSONB;
 BEGIN
   IF length(v_code) < 6 THEN
     RETURN NULL;
@@ -1359,8 +1371,35 @@ BEGIN
     RETURN NULL;
   END IF;
   SELECT * INTO c FROM public.companies WHERE id = t.company_id;
+
+  SELECT COALESCE(jsonb_object_agg(e.key, e.value), '{}'::jsonb) INTO v_payload
+    FROM jsonb_each(COALESCE(t.payload, '{}'::jsonb)) e
+   WHERE e.key = ANY (v_public_keys);
+  IF v_payload = '{}'::jsonb THEN
+    -- registro antigo sem cópia completa: monta pelos campos da tabela
+    v_payload := jsonb_strip_nulls(jsonb_build_object(
+      'id', t.id, 'companyId', t.company_id, 'testNumber', t.test_number, 'reportNumber', t.report_number,
+      'certificateNumber', t.certificate_number, 'validationCode', t.validation_code,
+      'clientName', t.client_name, 'equipmentTag', t.equipment_tag, 'equipmentType', t.equipment_type,
+      'equipmentClass', t.equipment_class, 'equipmentSerial', t.equipment_serial, 'equipmentCa', t.equipment_ca,
+      'testDate', t.test_date, 'normCode', t.norm_code, 'appliedClass', t.applied_class,
+      'appliedVoltage_kV', t.applied_voltage_kv, 'voltageType', t.voltage_type, 'result', t.result,
+      'retestDueDate', t.retest_due_date, 'techResponsibleId', t.tech_responsible_id,
+      'techResponsibleName', t.tech_responsible_name, 'techResponsibleCrea', t.tech_responsible_crea,
+      'gloveLength_mm', t.glove_length_mm, 'mattingSurface', t.matting_surface,
+      'mattingThickness_mm', t.matting_thickness_mm, 'isolatedTools', t.isolated_tools
+    ));
+  END IF;
+
   RETURN json_build_object(
-    'test', to_jsonb(t) - 'device_id',
+    'test', jsonb_build_object(
+      'id', t.id,
+      'company_id', t.company_id,
+      'updated_at', t.updated_at,
+      -- assinatura do Responsável Técnico: impressa no certificado
+      'tech_responsible_signature', t.tech_responsible_signature,
+      'payload', v_payload
+    ),
     'company', CASE WHEN c.id IS NULL THEN NULL ELSE jsonb_build_object(
       'id', c.id, 'name', c.name, 'legal_name', c.legal_name, 'cnpj', c.cnpj, 'lab_info', c.lab_info
     ) END
@@ -1644,10 +1683,68 @@ EXCEPTION WHEN others THEN NULL;
 END $$;
 
 -- -------------------------------------------------------------------------
+-- CÂMERA REMOTA (celular sem login envia fotos para o computador)
+-- O computador (usuário logado) abre uma sessão com validade de 4 horas. O
+-- celular só consegue enviar fotos para a pasta de uma sessão aberta e ainda
+-- válida: ninguém de fora usa o armazenamento do laboratório.
+-- -------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.camera_sessions (
+  id TEXT PRIMARY KEY,
+  company_id TEXT REFERENCES public.companies(id) ON DELETE CASCADE,
+  created_by UUID,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE public.camera_sessions ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.camera_sessions FROM anon, authenticated;
+
+CREATE OR REPLACE FUNCTION public.jvm_open_camera_session(p_id TEXT)
+RETURNS TIMESTAMPTZ
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_company TEXT := public.jvm_my_company();
+  v_expires TIMESTAMPTZ := NOW() + INTERVAL '4 hours';
+BEGIN
+  IF v_company IS NULL OR NOT public.jvm_can_write() THEN
+    RAISE EXCEPTION 'Sem permissão para abrir sessão de câmera.' USING ERRCODE = '42501';
+  END IF;
+  IF p_id IS NULL OR p_id !~ '^JVM-CAM-[A-Z0-9]{12}$' THEN
+    RAISE EXCEPTION 'Código de sessão inválido.' USING ERRCODE = '22023';
+  END IF;
+  -- limpeza das sessões vencidas há mais de 1 dia
+  DELETE FROM public.camera_sessions WHERE expires_at < NOW() - INTERVAL '1 day';
+  INSERT INTO public.camera_sessions (id, company_id, created_by, expires_at)
+  VALUES (p_id, v_company, auth.uid(), v_expires)
+  ON CONFLICT (id) DO UPDATE SET expires_at = EXCLUDED.expires_at
+   WHERE public.camera_sessions.company_id = v_company;
+  RETURN v_expires;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.jvm_open_camera_session(TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.jvm_open_camera_session(TEXT) TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.jvm_camera_session_valid(p_id TEXT)
+RETURNS BOOLEAN
+LANGUAGE sql STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (SELECT 1 FROM public.camera_sessions WHERE id = p_id AND expires_at > NOW())
+$$;
+
+REVOKE ALL ON FUNCTION public.jvm_camera_session_valid(TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.jvm_camera_session_valid(TEXT) TO anon, authenticated;
+
+-- -------------------------------------------------------------------------
 -- STORAGE: fotos/evidências dos ensaios (bucket "jvm-evidencias")
 -- * Leitura pública pela URL da foto (usada nos laudos e no portal do QR Code)
 -- * Envio/alteração: só usuário logado, na pasta da própria empresa
--- * Câmera remota (celular sem login): só ENVIA imagens para "camera-remota/"
+-- * Câmera remota (celular sem login): só ENVIA imagens para
+--   "camera-remota/<sessão>/", e somente enquanto a sessão estiver válida
 -- -------------------------------------------------------------------------
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES ('jvm-evidencias', 'jvm-evidencias', true, 10485760, ARRAY['image/*'])
@@ -1679,7 +1776,8 @@ CREATE POLICY "jvm_evidencias_update" ON storage.objects FOR UPDATE TO authentic
                    OR (SELECT public.jvm_is_master())));
 CREATE POLICY "jvm_evidencias_camera_insert" ON storage.objects FOR INSERT TO anon, authenticated
   WITH CHECK (bucket_id = 'jvm-evidencias'
-              AND (storage.foldername(name))[1] = 'camera-remota');
+              AND (storage.foldername(name))[1] = 'camera-remota'
+              AND public.jvm_camera_session_valid((storage.foldername(name))[2]));
 
 -- =========================================================================
 -- BLOQUEIO DE DADOS DE DEMONSTRAÇÃO

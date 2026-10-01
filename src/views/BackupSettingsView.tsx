@@ -1467,7 +1467,7 @@ export const BackupSettingsView: React.FC = () => {
                         ...company,
                         validationBaseUrl: e.target.value
                       })}
-                      placeholder="https://mediumvioletred-bison-595566.hostingersite.com"
+                      placeholder="https://jvmlab.com.br"
                       className="flex-1 p-2 border border-slate-300 rounded-xl bg-white font-mono text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500"
                     />
                     <button

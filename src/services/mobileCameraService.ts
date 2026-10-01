@@ -71,9 +71,11 @@ class MobileCameraService {
 
   /** Gera um código de sessão curto e legível (ex.: JVM-CAM-9482-K3F) */
   generateSessionId(): string {
-    const randomNum = Math.floor(1000 + Math.random() * 9000);
-    const suffix = Math.random().toString(36).substring(2, 5).toUpperCase();
-    return `JVM-CAM-${randomNum}-${suffix}`;
+    // 12 caracteres aleatórios (32^12 combinações): o código não pode ser adivinhado
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    const random = new Uint8Array(12);
+    crypto.getRandomValues(random);
+    return 'JVM-CAM-' + Array.from(random, b => chars[b % chars.length]).join('');
   }
 
   getPairingUrl(sessionId: string): string {
@@ -223,6 +225,8 @@ class MobileCameraService {
     };
 
     this.writeLocal(sessionData);
+    // Libera o celular (sem login) a enviar fotos só para esta sessão, por 4 horas
+    SupabaseService.openCameraSession(sessionId).catch(() => {});
     this.broadcastChannel?.postMessage({ type: 'session_created', session: sessionData });
     this.ensureRealtime(sessionId).catch(() => {});
     return sessionData;

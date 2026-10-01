@@ -105,6 +105,7 @@ export const LaudoViewModal: React.FC<LaudoViewModalProps> = ({ test, isOpen, on
       await exportLaudoPDF(test, company);
     } catch (err) {
       console.error('Erro ao gerar PDF do Laudo:', err);
+      alert(`Não foi possível gerar o PDF do laudo: ${(err as any)?.message || err}`);
     } finally {
       setIsExporting(false);
     }
@@ -483,11 +484,11 @@ export const LaudoViewModal: React.FC<LaudoViewModalProps> = ({ test, isOpen, on
               </div>
               <div>
                 <span className="text-slate-500 block">Temperatura Ambiente:</span>
-                <span className="font-semibold text-slate-900">{test.environmental.temperatureC}°C</span>
+                <span className="font-semibold text-slate-900">{test.environmental?.temperatureC != null ? `${test.environmental.temperatureC}°C` : 'N/I'}</span>
               </div>
               <div>
                 <span className="text-slate-500 block">Umidade Relativa do Ar:</span>
-                <span className="font-semibold text-slate-900">{test.environmental.relativeHumidityPercent}% UR</span>
+                <span className="font-semibold text-slate-900">{test.environmental?.relativeHumidityPercent != null ? `${test.environmental.relativeHumidityPercent}% UR` : 'N/I'}</span>
               </div>
             </div>
 

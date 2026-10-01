@@ -10,13 +10,16 @@ interface PhotoDetailModalProps {
   onDelete?: (photoId: string) => void;
   /** Abre o editor (girar e marcar). */
   onEdit?: (photo: TestPhoto) => void;
+  /** Volta à foto original (sem marcações). */
+  onRestoreOriginal?: (photo: TestPhoto) => void;
 }
 
 export const PhotoDetailModal: React.FC<PhotoDetailModalProps> = ({
   photo,
   onClose,
   onDelete,
-  onEdit
+  onEdit,
+  onRestoreOriginal
 }) => {
   // Endereço para download (fotos guardadas à parte no aparelho são resolvidas)
   const [downloadUrl, setDownloadUrl] = useState('');
@@ -54,6 +57,17 @@ export const PhotoDetailModal: React.FC<PhotoDetailModalProps> = ({
 
           <div className="flex items-center gap-2">
             {/* Download */}
+            {onRestoreOriginal && photo.originalUrl && (
+              <button
+                type="button"
+                onClick={() => onRestoreOriginal(photo)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-slate-200 bg-slate-800 hover:bg-slate-700 rounded-xl transition-colors cursor-pointer"
+                title="Descartar as marcações e voltar à foto original"
+              >
+                Restaurar original
+              </button>
+            )}
+
             {onEdit && (
               <button
                 type="button"

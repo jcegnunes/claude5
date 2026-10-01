@@ -1906,7 +1906,11 @@ export class DielectricStorageService {
     if (!t) return;
     const swap = (u?: string) => (u && urlMap[u]) ? urlMap[u] : u;
     if (Array.isArray(t.photos)) {
-      t.photos = t.photos.map(ph => ({ ...ph, url: swap(ph.url) || ph.url }));
+      t.photos = t.photos.map(ph => ({
+        ...ph,
+        url: swap(ph.url) || ph.url,
+        ...(ph.originalUrl ? { originalUrl: swap(ph.originalUrl) || ph.originalUrl } : {})
+      }));
     }
     if (Array.isArray(t.visualInspection)) {
       t.visualInspection = t.visualInspection.map((v: any) => v && v.photoUrl ? { ...v, photoUrl: swap(v.photoUrl) } : v);

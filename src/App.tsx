@@ -14,6 +14,7 @@ import { LoginView } from './views/LoginView';
 import { CompanySetupView } from './views/CompanySetupView';
 import { EMPTY_USER } from './services/syncEngine';
 import { lazyView } from './utils/lazyView';
+import { ModalErrorBoundary } from './components/ModalErrorBoundary';
 import { startPhotoStorage } from './services/photoExternalizer';
 
 // Telas carregadas sob demanda (arquivos separados)
@@ -32,7 +33,8 @@ const ReportEmissionView = lazyView(() => import('./views/ReportEmissionView'), 
 const AndroidFieldModeView = lazyView(() => import('./views/AndroidFieldModeView'), 'AndroidFieldModeView');
 const MobileCameraCompanionView = lazyView(() => import('./views/MobileCameraCompanionView'), 'MobileCameraCompanionView');
 const CertificateValidationView = lazyView(() => import('./components/CertificateValidationView'), 'CertificateValidationView');
-// Modais (PDF, QR Code, câmera, instalação): carregados logo após a primeira tela
+const UsersView = lazyView(() => import('./views/UsersView'), 'UsersView');
+// Janelas (PDF, QR Code, câmera, instalação): baixadas só quando abertas
 const QRCodeScannerModal = lazyView(() => import('./components/QRCodeScannerModal'), 'QRCodeScannerModal');
 const LaudoViewModal = lazyView(() => import('./components/LaudoViewModal'), 'LaudoViewModal');
 const CertificadoViewModal = lazyView(() => import('./components/CertificadoViewModal'), 'CertificadoViewModal');
@@ -130,6 +132,8 @@ export default function App() {
 
   // Modals & Active Records
   const [isQRScannerOpen, setIsQRScannerOpen] = useState<boolean>(false);
+  // Menu com todas as telas (celular)
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
   const [isGlobalMobileCamOpen, setIsGlobalMobileCamOpen] = useState<boolean>(false);
   const [isDeviceFilesModalOpen, setIsDeviceFilesModalOpen] = useState<boolean>(false);
   const [activeLaudoTest, setActiveLaudoTest] = useState<TestRecord | null>(null);
@@ -475,62 +479,83 @@ export default function App() {
           {activeView === 'audit' && <AuditLogsView key={`android_audit_${dataVersion}`} />}
 
           {activeView === 'backup' && <BackupSettingsView key={`android_backup_${dataVersion}`} />}
+          {activeView === 'usuarios' && <UsersView key={`android_users_${dataVersion}`} />}
           </Suspense>
           </ViewErrorBoundary>
         </AndroidAppShell>
 
         {/* MODAL: QR Code Live Scanner & Lookup */}
-        <Suspense fallback={null}>
-          <QRCodeScannerModal
-            isOpen={isQRScannerOpen}
-            onClose={() => setIsQRScannerOpen(false)}
-            onSelectEquipment={(eq) => {
-              setEquipmentViewSelectedEq(eq);
-              setActiveView('equipment');
-            }}
-            onSelectValidationCode={(code) => {
-              setValidationCodeForPortal(code);
-              setActiveView('validar');
-            }}
-          />
-        </Suspense>
+        {isQRScannerOpen && (
+          <ModalErrorBoundary onClose={() => setIsQRScannerOpen(false)}>
+            <Suspense fallback={null}>
+              <QRCodeScannerModal
+                isOpen={isQRScannerOpen}
+                onClose={() => setIsQRScannerOpen(false)}
+                onSelectEquipment={(eq) => {
+                  setEquipmentViewSelectedEq(eq);
+                  setActiveView('equipment');
+                }}
+                onSelectValidationCode={(code) => {
+                  setValidationCodeForPortal(code);
+                  setActiveView('validar');
+                }}
+              />
+            </Suspense>
+          </ModalErrorBoundary>
+        )}
 
         {/* MODAL: Laudo Técnico PDF Viewer */}
-        <Suspense fallback={null}>
-          <LaudoViewModal
-            test={activeLaudoTest}
-            isOpen={!!activeLaudoTest}
-            onClose={() => setActiveLaudoTest(null)}
-            onEditTest={handleEditTest}
-          />
-        </Suspense>
+        {activeLaudoTest && (
+          <ModalErrorBoundary onClose={() => setActiveLaudoTest(null)}>
+            <Suspense fallback={null}>
+              <LaudoViewModal
+                test={activeLaudoTest}
+                isOpen={!!activeLaudoTest}
+                onClose={() => setActiveLaudoTest(null)}
+                onEditTest={handleEditTest}
+              />
+            </Suspense>
+          </ModalErrorBoundary>
+        )}
 
         {/* MODAL: Certificado de Conformidade PDF Viewer */}
-        <Suspense fallback={null}>
-          <CertificadoViewModal
-            test={activeCertificadoTest}
-            isOpen={!!activeCertificadoTest}
-            onClose={() => setActiveCertificadoTest(null)}
-            onEditTest={handleEditTest}
-          />
-        </Suspense>
+        {activeCertificadoTest && (
+          <ModalErrorBoundary onClose={() => setActiveCertificadoTest(null)}>
+            <Suspense fallback={null}>
+              <CertificadoViewModal
+                test={activeCertificadoTest}
+                isOpen={!!activeCertificadoTest}
+                onClose={() => setActiveCertificadoTest(null)}
+                onEditTest={handleEditTest}
+              />
+            </Suspense>
+          </ModalErrorBoundary>
+        )}
 
         {/* MODAL: Guia de Instalação Android PWA / APK */}
-        <Suspense fallback={null}>
-          <AndroidInstallModal
-            isOpen={isInstallModalOpen}
-            onClose={() => setIsInstallModalOpen(false)}
-            onLaunchAndroidMode={() => setIsFieldMode(true)}
-          />
-        </Suspense>
+        {isInstallModalOpen && (
+          <ModalErrorBoundary onClose={() => setIsInstallModalOpen(false)}>
+            <Suspense fallback={null}>
+              <AndroidInstallModal
+                isOpen={isInstallModalOpen}
+                onClose={() => setIsInstallModalOpen(false)}
+                onLaunchAndroidMode={() => setIsFieldMode(true)}
+              />
+            </Suspense>
+          </ModalErrorBoundary>
+        )}
 
         {/* MODAL: Gerenciador de Arquivos e Laudos Salvos no Dispositivo */}
-        <Suspense fallback={null}>
-          <LocalDeviceFilesManagerModal
-            isOpen={isDeviceFilesModalOpen}
-            onClose={() => setIsDeviceFilesModalOpen(false)}
-          />
-        </Suspense>
+        {isDeviceFilesModalOpen && (
+          <ModalErrorBoundary onClose={() => setIsDeviceFilesModalOpen(false)}>
+            <Suspense fallback={null}>
+              <LocalDeviceFilesManagerModal
+                isOpen={isDeviceFilesModalOpen}
+                onClose={() => setIsDeviceFilesModalOpen(false)}
+              />
+            </Suspense>
+          </ModalErrorBoundary>
+        )}
       </div>
     );
   }
@@ -694,6 +719,7 @@ export default function App() {
           {activeView === 'audit' && <AuditLogsView key={`desk_audit_${dataVersion}`} />}
 
           {activeView === 'backup' && <BackupSettingsView key={`desk_backup_${dataVersion}`} />}
+          {activeView === 'usuarios' && <UsersView key={`desk_users_${dataVersion}`} />}
           </Suspense>
           </ViewErrorBoundary>
         </main>
@@ -705,50 +731,88 @@ export default function App() {
         onNavigate={setActiveView}
         onOpenQRScanner={() => setIsQRScannerOpen(true)}
         pendingSyncCount={pendingSyncCount}
+        onOpenMenu={() => setIsMobileMenuOpen(true)}
       />
 
+      {/* Menu com todas as telas (celular): a barra lateral abre como gaveta */}
+      {isMobileMenuOpen && (
+        <div className="md:hidden fixed inset-0 z-50 flex" role="dialog" aria-modal="true" aria-label="Menu do sistema">
+          <Sidebar
+            variant="drawer"
+            activeView={activeView}
+            onNavigate={(view) => { setActiveView(view); setIsMobileMenuOpen(false); }}
+            userRole={currentUser.role}
+            pendingSyncCount={pendingSyncCount}
+            onToggleFieldMode={() => { setIsMobileMenuOpen(false); setIsFieldMode(!isFieldMode); }}
+            onOpenInstallModal={() => { setIsMobileMenuOpen(false); setIsInstallModalOpen(true); }}
+          />
+          <button
+            type="button"
+            className="flex-1 bg-slate-900/60"
+            aria-label="Fechar menu"
+            onClick={() => setIsMobileMenuOpen(false)}
+          />
+        </div>
+      )}
+
       {/* MODAL: QR Code Live Scanner & Lookup */}
-      <Suspense fallback={null}>
-        <QRCodeScannerModal
-          isOpen={isQRScannerOpen}
-          onClose={() => setIsQRScannerOpen(false)}
-          onSelectEquipment={(eq) => {
-            setEquipmentViewSelectedEq(eq);
-            setActiveView('equipment');
-          }}
-          onSelectValidationCode={(code) => {
-            setValidationCodeForPortal(code);
-            setActiveView('validar');
-          }}
-        />
-      </Suspense>
+      {isQRScannerOpen && (
+        <ModalErrorBoundary onClose={() => setIsQRScannerOpen(false)}>
+          <Suspense fallback={null}>
+            <QRCodeScannerModal
+              isOpen={isQRScannerOpen}
+              onClose={() => setIsQRScannerOpen(false)}
+              onSelectEquipment={(eq) => {
+                setEquipmentViewSelectedEq(eq);
+                setActiveView('equipment');
+              }}
+              onSelectValidationCode={(code) => {
+                setValidationCodeForPortal(code);
+                setActiveView('validar');
+              }}
+            />
+          </Suspense>
+        </ModalErrorBoundary>
+      )}
 
       {/* MODAL: Laudo Técnico PDF Viewer */}
-      <Suspense fallback={null}>
-        <LaudoViewModal
-          test={activeLaudoTest}
-          isOpen={!!activeLaudoTest}
-          onClose={() => setActiveLaudoTest(null)}
-        />
-      </Suspense>
+      {activeLaudoTest && (
+        <ModalErrorBoundary onClose={() => setActiveLaudoTest(null)}>
+          <Suspense fallback={null}>
+            <LaudoViewModal
+              test={activeLaudoTest}
+              isOpen={!!activeLaudoTest}
+              onClose={() => setActiveLaudoTest(null)}
+            />
+          </Suspense>
+        </ModalErrorBoundary>
+      )}
 
       {/* MODAL: Certificado de Conformidade PDF Viewer */}
-      <Suspense fallback={null}>
-        <CertificadoViewModal
-          test={activeCertificadoTest}
-          isOpen={!!activeCertificadoTest}
-          onClose={() => setActiveCertificadoTest(null)}
-        />
-      </Suspense>
+      {activeCertificadoTest && (
+        <ModalErrorBoundary onClose={() => setActiveCertificadoTest(null)}>
+          <Suspense fallback={null}>
+            <CertificadoViewModal
+              test={activeCertificadoTest}
+              isOpen={!!activeCertificadoTest}
+              onClose={() => setActiveCertificadoTest(null)}
+            />
+          </Suspense>
+        </ModalErrorBoundary>
+      )}
 
       {/* MODAL: Guia de Instalação Android PWA / APK */}
-      <Suspense fallback={null}>
-        <AndroidInstallModal
-          isOpen={isInstallModalOpen}
-          onClose={() => setIsInstallModalOpen(false)}
-          onLaunchAndroidMode={() => setIsFieldMode(true)}
-        />
-      </Suspense>
+      {isInstallModalOpen && (
+        <ModalErrorBoundary onClose={() => setIsInstallModalOpen(false)}>
+          <Suspense fallback={null}>
+            <AndroidInstallModal
+              isOpen={isInstallModalOpen}
+              onClose={() => setIsInstallModalOpen(false)}
+              onLaunchAndroidMode={() => setIsFieldMode(true)}
+            />
+          </Suspense>
+        </ModalErrorBoundary>
+      )}
 
       {/* MODAL: Global Mobile Camera Connection Bridge */}
       <Suspense fallback={null}>
@@ -772,12 +836,16 @@ export default function App() {
       </Suspense>
 
       {/* MODAL: Gerenciador de Arquivos e Laudos Salvos no Dispositivo */}
-      <Suspense fallback={null}>
-        <LocalDeviceFilesManagerModal
-          isOpen={isDeviceFilesModalOpen}
-          onClose={() => setIsDeviceFilesModalOpen(false)}
-        />
-      </Suspense>
+      {isDeviceFilesModalOpen && (
+        <ModalErrorBoundary onClose={() => setIsDeviceFilesModalOpen(false)}>
+          <Suspense fallback={null}>
+            <LocalDeviceFilesManagerModal
+              isOpen={isDeviceFilesModalOpen}
+              onClose={() => setIsDeviceFilesModalOpen(false)}
+            />
+          </Suspense>
+        </ModalErrorBoundary>
+      )}
     </div>
   );
 }

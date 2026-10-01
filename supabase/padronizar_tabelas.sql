@@ -307,7 +307,12 @@ INSERT INTO jvm_padrao VALUES
   ('number_sequences','company_id','text'),
   ('number_sequences','kind','text'),
   ('number_sequences','last_value','bigint'),
-  ('number_sequences','updated_at','timestamp with time zone');
+  ('number_sequences','updated_at','timestamp with time zone'),
+  ('camera_sessions','id','text'),
+  ('camera_sessions','company_id','text'),
+  ('camera_sessions','created_by','uuid'),
+  ('camera_sessions','expires_at','timestamp with time zone'),
+  ('camera_sessions','created_at','timestamp with time zone');
 
 -- 2. Remove as colunas que não fazem parte do padrão
 DO $$

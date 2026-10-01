@@ -1,3 +1,4 @@
+import { hardenPdfText } from '../utils/safePdf';
 import { getPhotoDataUrl, isLocalPhotoRef } from './photoStore';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -116,6 +117,7 @@ export async function exportTestsSummaryReportPDF(
     unit: 'mm',
     format: 'a4'
   });
+  hardenPdfText(doc);
 
   const pageWidth = 297;
   const pageHeight = 210;

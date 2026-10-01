@@ -22,7 +22,10 @@ const isInline = (url: unknown): url is string => typeof url === 'string' && url
 /** Fotos de um ensaio (evidências e inspeção visual), no formato em que estiverem. */
 export function testPhotoUrls(test: Partial<TestRecord>): string[] {
   const urls: string[] = [];
-  (test.photos || []).forEach(ph => { if (ph?.url) urls.push(ph.url); });
+  (test.photos || []).forEach(ph => {
+    if (ph?.url) urls.push(ph.url);
+    if (ph?.originalUrl) urls.push(ph.originalUrl);
+  });
   (test.visualInspection || []).forEach((v: any) => { if (v?.photoUrl) urls.push(v.photoUrl); });
   return urls;
 }
@@ -94,7 +97,13 @@ export async function inlineTestPhotos<T extends Partial<TestRecord>>(test: T): 
   const resolve = async (url?: string) => (isLocalPhotoRef(url) ? (await getPhotoDataUrl(url)) || url : url);
   return {
     ...test,
-    photos: test.photos ? await Promise.all(test.photos.map(async ph => ({ ...ph, url: (await resolve(ph.url)) || ph.url }))) : test.photos,
+    photos: test.photos
+      ? await Promise.all(test.photos.map(async ph => ({
+          ...ph,
+          url: (await resolve(ph.url)) || ph.url,
+          ...(ph.originalUrl ? { originalUrl: (await resolve(ph.originalUrl)) || ph.originalUrl } : {})
+        })))
+      : test.photos,
     visualInspection: test.visualInspection
       ? await Promise.all(test.visualInspection.map(async (v: any) => (v && v.photoUrl ? { ...v, photoUrl: await resolve(v.photoUrl) } : v)))
       : test.visualInspection

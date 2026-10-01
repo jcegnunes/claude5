@@ -1,24 +1,27 @@
 import React from 'react';
-import { LayoutDashboard, FlaskConical, Shield, QrCode, RefreshCw } from 'lucide-react';
+import { LayoutDashboard, FlaskConical, Shield, QrCode, RefreshCw, Menu } from 'lucide-react';
 
 interface MobileBottomNavProps {
   activeView: string;
   onNavigate: (view: string) => void;
   onOpenQRScanner: () => void;
   pendingSyncCount: number;
+  /** Abre o menu com todas as telas. */
+  onOpenMenu?: () => void;
 }
 
 export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   activeView,
   onNavigate,
   onOpenQRScanner,
-  pendingSyncCount
+  pendingSyncCount,
+  onOpenMenu
 }) => {
   return (
     <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#0A2540] border-t border-slate-800 text-white flex items-center justify-around h-16 px-2 shadow-2xl safe-area-pb">
       <button
         onClick={() => onNavigate('dashboard')}
-        className={`flex flex-col items-center justify-center w-14 h-full gap-1 ${
+        className={`flex flex-col items-center justify-center flex-1 min-w-0 h-full gap-1 ${
           activeView === 'dashboard' ? 'text-orange-400 font-bold' : 'text-slate-400'
         }`}
       >
@@ -28,7 +31,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
 
       <button
         onClick={() => onNavigate('equipment')}
-        className={`flex flex-col items-center justify-center w-14 h-full gap-1 ${
+        className={`flex flex-col items-center justify-center flex-1 min-w-0 h-full gap-1 ${
           activeView === 'equipment' ? 'text-orange-400 font-bold' : 'text-slate-400'
         }`}
       >
@@ -39,7 +42,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       {/* Central QR Code Scanner Button */}
       <button
         onClick={onOpenQRScanner}
-        className="flex flex-col items-center justify-center -translate-y-4 w-13 h-13 rounded-full bg-orange-500 hover:bg-orange-600 text-white shadow-lg border-4 border-slate-900 transition-transform active:scale-95"
+        className="flex flex-col items-center justify-center -translate-y-4 w-13 h-13 shrink-0 mx-1 rounded-full bg-orange-500 hover:bg-orange-600 text-white shadow-lg border-4 border-slate-900 transition-transform active:scale-95"
         title="Escanear QR Code"
       >
         <QrCode className="w-6 h-6" />
@@ -47,7 +50,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
 
       <button
         onClick={() => onNavigate('wizard')}
-        className={`flex flex-col items-center justify-center w-14 h-full gap-1 ${
+        className={`flex flex-col items-center justify-center flex-1 min-w-0 h-full gap-1 ${
           activeView === 'wizard' ? 'text-orange-400 font-bold' : 'text-slate-400'
         }`}
       >
@@ -57,7 +60,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
 
       <button
         onClick={() => onNavigate('sync')}
-        className={`relative flex flex-col items-center justify-center w-14 h-full gap-1 ${
+        className={`relative flex flex-col items-center justify-center flex-1 min-w-0 h-full gap-1 ${
           activeView === 'sync' ? 'text-orange-400 font-bold' : 'text-slate-400'
         }`}
       >
@@ -69,6 +72,17 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           </span>
         )}
       </button>
+      {onOpenMenu && (
+        <button
+          type="button"
+          onClick={onOpenMenu}
+          className="flex flex-col items-center justify-center flex-1 min-w-0 h-full gap-1 text-slate-400"
+          aria-label="Abrir menu com todas as telas"
+        >
+          <Menu className="w-5 h-5" />
+          <span className="text-[10px]">Menu</span>
+        </button>
+      )}
     </nav>
   );
 };

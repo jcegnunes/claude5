@@ -1,21 +1,22 @@
 import React from 'react';
-import { 
-  LayoutDashboard, 
-  FlaskConical, 
-  FileText, 
-  Shield, 
-  ClipboardList, 
-  Building2, 
-  Gauge, 
-  BookOpen, 
-  RefreshCw, 
-  History, 
-  Sliders, 
+import {
+  LayoutDashboard,
+  FlaskConical,
+  FileText,
+  Shield,
+  ClipboardList,
+  Building2,
+  Gauge,
+  BookOpen,
+  RefreshCw,
+  History,
+  Sliders,
   CheckCircle,
   QrCode,
   Smartphone,
   Download,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Users
 } from 'lucide-react';
 import { UserRole } from '../types';
 
@@ -26,6 +27,8 @@ interface SidebarProps {
   pendingSyncCount: number;
   onToggleFieldMode?: () => void;
   onOpenInstallModal?: () => void;
+  /** 'drawer': menu lateral aberto pelo botão "Menu" no celular. */
+  variant?: 'desktop' | 'drawer';
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -34,7 +37,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   userRole,
   pendingSyncCount,
   onToggleFieldMode,
-  onOpenInstallModal
+  onOpenInstallModal,
+  variant = 'desktop'
 }) => {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'responsavel_tecnico', 'tecnico', 'administrativo', 'cliente'] },
@@ -48,6 +52,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'norms', label: 'Normas & Critérios', icon: BookOpen, roles: ['admin', 'responsavel_tecnico'] },
     { id: 'sync', label: 'Sincronização & Conflitos', icon: RefreshCw, badge: pendingSyncCount > 0 ? String(pendingSyncCount) : undefined, roles: ['admin', 'responsavel_tecnico', 'tecnico', 'administrativo'] },
     { id: 'audit', label: 'Auditoria & Logs', icon: History, roles: ['admin', 'responsavel_tecnico'] },
+    { id: 'usuarios', label: 'Usuários & Técnicos', icon: Users, roles: ['admin', 'responsavel_tecnico'] },
     { id: 'backup', label: 'Configurações & Backup', icon: Sliders, roles: ['admin', 'responsavel_tecnico'] },
     { id: 'validar', label: 'Validação de QR Code', icon: QrCode, roles: ['admin', 'responsavel_tecnico', 'tecnico', 'administrativo', 'cliente'] }
   ];
@@ -55,7 +60,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const allowedItems = navItems.filter(item => item.roles.includes(userRole));
 
   return (
-    <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col shrink-0 border-r border-slate-800 hidden md:flex min-h-[calc(100vh-4rem)]">
+    <aside className={variant === 'drawer'
+      ? 'w-72 max-w-[85vw] h-full bg-slate-900 text-slate-300 flex flex-col shrink-0 border-r border-slate-800 shadow-2xl'
+      : 'w-64 bg-slate-900 text-slate-300 flex flex-col shrink-0 border-r border-slate-800 hidden md:flex min-h-[calc(100vh-4rem)]'}>
       <div className="p-4 flex-1 space-y-1 overflow-y-auto">
         <div className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
           Módulos do Sistema
@@ -131,7 +138,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
           <div className="truncate">
             <span className="font-semibold text-slate-200 block">JVM Dielectric Lab</span>
-            <span className="text-[10px] text-slate-400">v1.0.0 • NR-10 Conforme</span>
+            <span className="text-[10px] text-slate-400">v{__APP_VERSION__} • NR-10 Conforme</span>
           </div>
         </div>
       </div>

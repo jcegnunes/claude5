@@ -387,6 +387,20 @@ export class FullBackupService {
               equipmentTag: t.equipmentTag
             });
           }
+          if (ph.originalUrl) {
+            photoQueue.push({
+              id: `${ph.id || `ph-${idx}`}-original`,
+              category: ph.category,
+              sourceUrl: ph.originalUrl,
+              filename: `${testNum}_${testTag}_${idx + 1}_${ph.category}_original`,
+              folder: 'ensaios',
+              caption: `${ph.caption || ''} (original, sem marcações)`,
+              timestamp: ph.timestamp,
+              userName: ph.userName,
+              testNumber: t.testNumber,
+              equipmentTag: t.equipmentTag
+            });
+          }
         });
       }
 

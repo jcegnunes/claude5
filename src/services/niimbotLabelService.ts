@@ -1,3 +1,4 @@
+import { hardenPdfText } from '../utils/safePdf';
 import QRCode from 'qrcode';
 import jsPDF from 'jspdf';
 import JSZip from 'jszip';
@@ -1235,6 +1236,7 @@ export async function exportNiimbotPDF(
     unit: 'mm',
     format: [config.widthMm, config.heightMm]
   });
+  hardenPdfText(doc);
 
   const total = tests.length;
 

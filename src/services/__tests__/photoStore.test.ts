@@ -81,4 +81,16 @@ describe('Fotos guardadas à parte no aparelho', () => {
     expect(test.photos[0].url).toBe(ref);
     expect(testPhotoUrls(test)).toEqual([ref, 'https://exemplo.supabase.co/foto.jpg', ref]);
   });
+
+  it('foto editada leva junto a original (sem marcações) em todo o fluxo', async () => {
+    const original = fakeJpegDataUrl(4_000);
+    const editada = fakeJpegDataUrl(3_000);
+    const refOriginal = await savePhotoFromDataUrl(original);
+    const refEditada = await savePhotoFromDataUrl(editada);
+    const test: any = { id: 't9', photos: [{ id: 'p1', url: refEditada, originalUrl: refOriginal }] };
+    expect(testPhotoUrls(test)).toEqual([refEditada, refOriginal]);
+    const inlined = await inlineTestPhotos(test);
+    expect(inlined.photos[0].url).toBe(editada);
+    expect(inlined.photos[0].originalUrl).toBe(original);
+  });
 });

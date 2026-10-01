@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  ShieldCheck, 
-  ShieldAlert, 
-  Search, 
-  CheckCircle2, 
-  AlertTriangle, 
-  Calendar, 
-  Lock, 
+import {
+  ShieldCheck,
+  ShieldAlert,
+  Search,
+  CheckCircle2,
+  AlertTriangle,
+  Calendar,
+  Lock,
   ArrowLeft,
   Building,
   Check,
@@ -37,6 +37,8 @@ export const CertificateValidationView: React.FC<CertificateValidationViewProps>
   const [isExportingLaudo, setIsExportingLaudo] = useState(false);
   // Laboratório emissor: vem junto com o certificado consultado no banco
   const [remoteLabInfo, setRemoteLabInfo] = useState<CompanyLabInfo | null>(null);
+  // Consulta pública (sem login): só os dados do certificado vêm do banco
+  const [isPublicResult, setIsPublicResult] = useState(false);
   const company = remoteLabInfo || DielectricStorageService.getCompanyInfo();
 
   const handleSearch = async (codeToSearch: string) => {
@@ -46,6 +48,7 @@ export const CertificateValidationView: React.FC<CertificateValidationViewProps>
     // 1. Cache do aparelho (consulta instantânea, funciona offline)
     const localTest = DielectricStorageService.getTestById(clean);
     if (localTest) {
+      setIsPublicResult(false);
       setRemoteLabInfo(null);
       setTestRecord(localTest);
       setHasSearched(true);
@@ -56,6 +59,7 @@ export const CertificateValidationView: React.FC<CertificateValidationViewProps>
     //    possui os dados localmente (antes o resultado era sempre "não encontrado")
     const remote = navigator.onLine ? await SupabaseService.fetchPublicValidation(clean) : null;
     setRemoteLabInfo(remote?.labInfo || null);
+    setIsPublicResult(!!remote);
     setTestRecord(remote?.test || null);
     setHasSearched(true);
   };
@@ -293,15 +297,21 @@ export const CertificateValidationView: React.FC<CertificateValidationViewProps>
                         <span>{isExportingCert ? 'Gerando Certificado...' : 'Exportar Certificado PDF'}</span>
                       </button>
                     )}
-                    <button
-                      type="button"
-                      onClick={handleDownloadLaudo}
-                      disabled={isExportingLaudo}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold bg-[#0A2540] hover:bg-[#081d33] disabled:bg-slate-700 text-white rounded-xl transition-all shadow-sm"
-                    >
-                      <FileText className="w-4 h-4 text-orange-400" />
-                      <span>{isExportingLaudo ? 'Gerando Laudo...' : 'Exportar Laudo PDF'}</span>
-                    </button>
+                    {isPublicResult ? (
+                      <p className="text-[11px] text-slate-500 max-w-xs">
+                        O laudo técnico completo (medições, fotos e registros do ensaio) é fornecido pelo laboratório emissor.
+                      </p>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleDownloadLaudo}
+                        disabled={isExportingLaudo}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold bg-[#0A2540] hover:bg-[#081d33] disabled:bg-slate-700 text-white rounded-xl transition-all shadow-sm"
+                      >
+                        <FileText className="w-4 h-4 text-orange-400" />
+                        <span>{isExportingLaudo ? 'Gerando Laudo...' : 'Exportar Laudo PDF'}</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

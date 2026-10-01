@@ -174,6 +174,28 @@ async function main() {
   r = await as(db, anon, `SELECT public.jvm_validar_certificado('ENS-0001') AS v`);
   ok(r.rows?.[0]?.v === null, 'portal NÃO aceita número sequencial de ensaio');
 
+  // Portal devolve só os dados do certificado (LGPD)
+  const payloadCompleto = {
+    id: 't-2', reportNumber: 'LAU-PORTAL', certificateNumber: 'CERT-PORTAL', validationCode: 'VAL-JVM-2609-SENS1234',
+    clientName: 'Cliente', equipmentTag: 'TAG2', result: 'APROVADO', techResponsibleName: 'Eng. RT',
+    collaboratorName: 'José da Silva', collaboratorRegistration: 'MAT-555', technicalNotes: 'observação interna',
+    photos: [{ id: 'f', url: 'data:image/jpeg;base64,AAAA' }], clientSignature: { signatureImage: 'data:x' },
+    measuredLeakageCurrent_mA: 3.2, instrumentsUsed: [{ id: 'hipot' }]
+  };
+  r = await as(db, user(b), `INSERT INTO public.test_records (id, company_id, uuid, test_number, report_number, certificate_number, validation_code, document_hash, client_name, equipment_tag, equipment_type, equipment_class, test_date, norm_code, applied_class, applied_voltage_kv, application_duration_seconds, measured_leakage_current_ma, leakage_current_limit_ma, result, collaborator_name, technical_notes, photos, client_signature, tech_responsible_signature, payload)
+    VALUES ('t-2', 'comp-2', 'u-2', 'ENS-PORTAL', 'LAU-PORTAL', 'CERT-PORTAL', 'VAL-JVM-2609-SENS1234', 'h', 'Cliente', 'TAG2', 'luva', '0', '2026-09-28', 'NBR 16295', '0', 5, 60, 3.2, 24, 'APROVADO',
+            'José da Silva', 'observação interna', '[{"url":"data:image/jpeg;base64,AAAA"}]', '{"signatureImage":"data:x"}', '{"signatureImage":"data:rt"}', $1)`, [JSON.stringify(payloadCompleto)]);
+  if (r.error) console.log('   erro ao gravar ensaio 2:', r.error);
+  r = await as(db, anon, `SELECT public.jvm_validar_certificado('VAL-JVM-2609-SENS1234') AS v`);
+  const pub = typeof r.rows?.[0]?.v === 'string' ? JSON.parse(r.rows[0].v) : r.rows?.[0]?.v;
+  const pubText = JSON.stringify(pub || {});
+  ok(pub?.test?.payload?.certificateNumber === 'CERT-PORTAL' && pub?.test?.payload?.result === 'APROVADO' && pub?.test?.payload?.techResponsibleName === 'Eng. RT',
+    'portal devolve os dados do certificado');
+  ok(!!pub?.test?.tech_responsible_signature, 'portal devolve a assinatura do RT (impressa no certificado)');
+  ok(!/José da Silva|MAT-555|observação interna|signatureImage":"data:x|base64,AAAA|hipot/.test(pubText),
+    'portal NÃO devolve colaborador, fotos, assinatura do cliente, instrumentos nem observações internas');
+  ok(pub?.test?.payload?.measuredLeakageCurrent_mA === undefined, 'portal NÃO devolve as medições detalhadas');
+
   // ---------------------------------------------------------------- perfis
   await db.exec(`INSERT INTO public.users (id, company_id, name, email, role, password_hash) VALUES ('usr-c', 'comp-2', 'Cli', 'cli@x.com', 'cliente', 'Senha@C1')`);
   const c = await uidOf(db, 'usr-c');
@@ -216,8 +238,22 @@ async function main() {
   ok(!r.error, 'foto na pasta da própria empresa');
   r = await as(db, user(b), `INSERT INTO storage.objects (bucket_id, name) VALUES ('jvm-evidencias', 'comp-1/t-1/foto.jpg')`);
   ok(!!r.error, 'foto NÃO vai para pasta de outra empresa');
-  r = await as(db, anon, `INSERT INTO storage.objects (bucket_id, name) VALUES ('jvm-evidencias', 'camera-remota/JVM-CAM-1/f.jpg')`);
-  ok(!r.error, 'câmera remota (anon) envia para camera-remota/');
+  // câmera remota: o computador logado abre a sessão; o celular (anon) só envia para ela
+  r = await as(db, user(b), `SELECT public.jvm_open_camera_session('JVM-CAM-ABCDEFGH2345') AS e`);
+  ok(!r.error && !!r.rows[0].e, `usuário logado abre sessão de câmera (${r.error || 'ok'})`);
+  r = await as(db, anon, `INSERT INTO storage.objects (bucket_id, name) VALUES ('jvm-evidencias', 'camera-remota/JVM-CAM-ABCDEFGH2345/f.jpg')`);
+  ok(!r.error, 'câmera remota (anon) envia para a sessão aberta');
+  r = await as(db, anon, `INSERT INTO storage.objects (bucket_id, name) VALUES ('jvm-evidencias', 'camera-remota/JVM-CAM-QQQQQQQQQQQQ/f.jpg')`);
+  ok(!!r.error, 'câmera remota (anon) NÃO envia para sessão que não foi aberta');
+  r = await as(db, anon, `SELECT public.jvm_open_camera_session('JVM-CAM-ZZZZZZZZZZZZ')`);
+  ok(!!r.error, 'anon NÃO abre sessão de câmera');
+  r = await as(db, user(b), `SELECT public.jvm_open_camera_session('JVM-CAM-1')`);
+  ok(!!r.error, 'código de sessão fraco é recusado');
+  await db.exec(`UPDATE public.camera_sessions SET expires_at = NOW() - INTERVAL '1 minute' WHERE id = 'JVM-CAM-ABCDEFGH2345'`);
+  r = await as(db, anon, `INSERT INTO storage.objects (bucket_id, name) VALUES ('jvm-evidencias', 'camera-remota/JVM-CAM-ABCDEFGH2345/g.jpg')`);
+  ok(!!r.error, 'câmera remota NÃO envia depois que a sessão vence');
+  r = await as(db, anon, `SELECT * FROM public.camera_sessions`);
+  ok(!!r.error, 'tabela de sessões não é lida pela chave pública');
   r = await as(db, anon, `INSERT INTO storage.objects (bucket_id, name) VALUES ('jvm-evidencias', 'comp-2/x.jpg')`);
   ok(!!r.error, 'anon NÃO envia fora de camera-remota/');
   r = await as(db, anon, `SELECT name FROM storage.objects`);

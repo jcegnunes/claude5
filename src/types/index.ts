@@ -303,6 +303,8 @@ export interface TestPhoto {
   userName: string;
   /** Data da última edição (giro/marcações) feita no editor de fotos. */
   editedAt?: string;
+  /** Foto original, sem marcações, guardada na primeira edição (evidência). */
+  originalUrl?: string;
   gpsCoords?: {
     latitude: number;
     longitude: number;

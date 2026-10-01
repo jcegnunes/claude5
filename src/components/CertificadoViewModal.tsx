@@ -78,6 +78,7 @@ export const CertificadoViewModal: React.FC<CertificadoViewModalProps> = ({
       await exportCertificadoPDF(test, company);
     } catch (err) {
       console.error('Erro ao exportar PDF do certificado:', err);
+      alert(`Não foi possível gerar o PDF do certificado: ${(err as any)?.message || err}`);
     } finally {
       setIsExporting(false);
     }

@@ -1,3 +1,4 @@
+import { hardenPdfText } from '../utils/safePdf';
 import jsPDF from 'jspdf';
 import QRCode from 'qrcode';
 import { ConsolidatedReport, TestRecord, CompanyLabInfo } from '../types';
@@ -35,6 +36,7 @@ export async function exportConsolidatedReportPDF(
     unit: 'mm',
     format: 'a4'
   });
+  hardenPdfText(doc);
 
   const pageWidth = 210;
   const pageHeight = 297;
