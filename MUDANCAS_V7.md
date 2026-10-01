@@ -95,10 +95,29 @@ e mostra o aviso para executar o script.
   da planilha: Nome; CPF; Função; Empresa), presença e nota. "Emitir" gera os
   certificados de todos os aprovados de uma vez; "Lista de presença" gera o PDF com uma
   coluna de assinatura por dia.
+- **Alunos da turma** podem ser editados e excluídos mesmo depois da emissão: ao salvar,
+  as correções (nome, CPF, função, empresa, presença, nota) vão para o certificado, que
+  mantém número e QR Code; aluno excluído tem o certificado **cancelado**; aluno que deixa
+  de atingir o mínimo do curso tem o certificado cancelado (com confirmação) e pode
+  receber um novo se for corrigido. Nota de 0 a 10 e presença de 0 a 100% são conferidas.
 - **Certificados**: emissão individual (sem turma), busca por nome/CPF/número, PDF,
   link de validação, cancelamento com motivo (o validador mostra CANCELADO).
 - **Painel**: emitidos no ano, turmas abertas, vencendo em 60 dias e vencidos sem
   reciclagem.
+- **Importar planilha** (Certificados): emissão de vários certificados a partir de Excel
+  (.xlsx/.xls, CSV ou ODS, até 1000 linhas). A planilha tem 3 colunas: **Nome, CPF e
+  Colaborador da Empresa** ("Baixar modelo" gera o arquivo, com a lista de cursos e as
+  instruções). Curso, datas, local, instrutor, presença e nota são escolhidos na tela e
+  valem para todos. Colunas extras opcionais (Função, Curso, Início, Término, Carga
+  horária, Local, Presença (%), Nota, Instrutor) valem só para a linha. A prévia
+  mostra, linha a linha, quem será emitido, quem foi reprovado (presença/nota abaixo do
+  mínimo do curso) e os erros (CPF inválido, curso ou instrutor não cadastrado, datas,
+  pessoa repetida ou certificado já emitido — conferido pelo CPF ou, sem CPF, pelo nome).
+  Por padrão cria uma turma por curso + período + local + instrutor (com lista de
+  presença); no fim, um único PDF com todos os certificados emitidos.
+- **Turma → Importar planilha**: a mesma planilha (Nome, CPF, Colaborador da Empresa)
+  inclui os alunos na turma; CPF inválido e alunos já presentes ficam de fora (com aviso).
+  "Colar lista" segue a mesma ordem: Nome; CPF; Colaborador da Empresa (Função opcional).
 
 **Certificado (PDF A4 paisagem):** frente com participante, CPF, curso, norma, período,
 carga horária, validade, assinaturas do instrutor, do Responsável Técnico (cadastro da
@@ -109,6 +128,27 @@ faixas dos ensaios (sem número repetido entre aparelhos).
 **Validação:** o QR Code usa o mesmo link do site Wix
 (`www.jvmengenharia.com.br/validar?codigo=VAL-TRE-...`). O validador reconhece o código
 `VAL-TRE-` e mostra os dados do certificado com o **CPF mascarado** (***.456.789-**).
+
+**Certificado digital ICP-Brasil (A1) — assinatura digital dos PDFs:**
+- Em Treinamentos → Instrutores: no cadastro de cada instrutor (quadro "Certificado
+  digital") e no cartão do **Responsável Técnico**, envie o arquivo `.pfx`/`.p12` e a senha.
+  O sistema confere a senha, mostra titular, CPF, emissor e validade, e recusa certificado
+  vencido. Só administrador ou RT cadastram/trocam/removem (exige internet).
+- O arquivo e a senha ficam **criptografados no banco** (tabela `training_signing_certs`,
+  chave em `jvm_private_secrets`), que o app não lê diretamente. Funções do banco entregam o
+  material só para quem emite certificados de treinamento na própria empresa, e registram o
+  último uso. Como a senha fica salva (escolha do laboratório), **quem emite certificados
+  assina em nome do titular** — cadastre apenas com autorização dele.
+- Ao baixar certificados (com internet), cada PDF é assinado digitalmente pelo RT e pelos
+  instrutores que têm certificado (uma assinatura por pessoa, sem invalidar a anterior).
+  Vários certificados saem num `.zip` com um PDF assinado por aluno. O certificado impresso
+  traz "Assinado digitalmente · ICP-Brasil" sob o nome de quem assinou. Confira no Adobe
+  Reader ou em https://validar.iti.gov.br. Sem internet ou com certificado vencido, o PDF
+  sai sem assinatura digital (com aviso).
+- Limitação: a assinatura é PAdES básica (PKCS#7 destacada, SHA-256). Ela é válida e
+  verificável, mas não inclui a política de assinatura ICP-Brasil (AD-RB) — o validador do
+  ITI pode indicar "sem política". Certificado A3 (token/cartão) não é suportado no navegador.
+- Requer executar de novo `supabase/modules/treinamentos.sql`.
 
 **Ligar/desligar:** Configurações & Backup → Módulos do sistema (por empresa; os dados
 ficam guardados).

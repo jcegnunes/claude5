@@ -13,6 +13,8 @@ import {
 } from '../../services/numberBlocks';
 import { DEFAULT_COURSES } from './defaultCourses';
 import { TRAINING_KEYS, TRAINING_MANAGED_KEYS } from './storageKeys';
+import type { ImportGroup } from './spreadsheetImport';
+import { normalizeText } from './spreadsheetImport';
 import {
   CERTIFICATE_PREFIX, CLASS_PREFIX, computeExpiryDate, generateTrainingValidationCode,
   isParticipantApproved, newId, todayIso
@@ -272,6 +274,47 @@ export function issueCertificatesForClass(classId: string): TrainingCertificate[
     saveClass({ ...turma, participants, status: turma.status === 'cancelada' ? turma.status : 'concluida' });
   }
   return created;
+}
+
+/**
+ * Emissão em lote (planilha Excel). Com turmas: cria uma turma concluída por
+ * grupo (curso + período + local) e emite os aprovados; sem turmas: emissão
+ * individual de cada aprovado.
+ */
+export function issueFromImport(groups: ImportGroup[], createClasses: boolean): { certificates: TrainingCertificate[]; classes: TrainingClass[] } {
+  const certificates: TrainingCertificate[] = [];
+  const classes: TrainingClass[] = [];
+  const clients = DielectricStorageService.getClients(currentCompanyId());
+  for (const g of groups) {
+    if (createClasses) {
+      const companies = Array.from(new Set(g.rows.map(r => r.company).filter(Boolean)));
+      const client = companies.length === 1
+        ? clients.find(c => [c.nomeFantasia, c.razaoSocial].some(n => normalizeText(n) === normalizeText(companies[0])))
+        : undefined;
+      const turma = saveClass({
+        id: newId('tur'), companyId: '', createdAt: '', updatedAt: '', classNumber: '',
+        courseId: g.course.id, courseName: g.course.name,
+        clientId: client?.id || '', clientName: client ? (client.nomeFantasia || client.razaoSocial) : (companies.length === 1 ? companies[0] : ''),
+        startDate: g.startDate, endDate: g.endDate, location: g.location, modality: g.course.modality,
+        workloadHours: g.workloadHours, instructorIds: g.instructorIds, status: 'concluida',
+        notes: 'Turma criada pela importação de planilha.',
+        participants: g.rows.map(r => ({
+          id: newId('alu'), name: r.name, cpf: r.cpf, role: r.role, company: r.company, attendance: r.attendance, grade: r.grade
+        }))
+      });
+      classes.push(turma);
+      certificates.push(...issueCertificatesForClass(turma.id));
+    } else {
+      g.rows.filter(r => r.approved).forEach(r => {
+        certificates.push(issueIndividualCertificate({
+          courseId: g.course.id,
+          participant: { name: r.name, cpf: r.cpf, role: r.role, company: r.company, attendance: r.attendance, grade: r.grade },
+          startDate: g.startDate, endDate: g.endDate, location: g.location, instructorIds: g.instructorIds, workloadHours: g.workloadHours
+        }));
+      });
+    }
+  }
+  return { certificates, classes };
 }
 
 /** Emissão individual (sem turma). */

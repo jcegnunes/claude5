@@ -274,6 +274,44 @@ async function main() {
   ok(!r.error && JSON.stringify(r.rows[0].allowed_modules) === '["ensaios"]', 'o app lê os módulos liberados do usuário');
   await db.exec(`UPDATE public.users SET allowed_modules = NULL WHERE id = 'usr-b'`);
 
+  // ------------------------------------------ certificado digital (A1)
+  await db.exec(`INSERT INTO public.training_instructors (id, company_id, name) VALUES ('ins-dig', 'comp-2', 'Instrutor Digital')`);
+  const saveSql = `SELECT public.jvm_training_save_signing_cert('instructor', 'ins-dig', 'UEZYLUJBU0U2NA==', 'SenhaPFX123', 'INSTRUTOR DIGITAL', '22222222222', 'AC TESTE', '01', now(), now() + interval '1 year') AS v`;
+  r = await as(db, user(b), saveSql);
+  ok(!!r.error, 'técnico NÃO cadastra certificado digital');
+  await db.exec(`UPDATE public.users SET role = 'responsavel_tecnico' WHERE id = 'usr-b'`);
+  r = await as(db, user(b), saveSql);
+  ok(!r.error, `Responsável Técnico cadastra o certificado digital do instrutor ${r.error || ''}`);
+  r = await as(db, user(b), `SELECT public.jvm_training_save_signing_cert('instructor', 'ins-outra', 'QQ==', 'x', 'X', '', '', '', now(), now()) AS v`);
+  ok(!!r.error, 'NÃO cadastra certificado para instrutor de outra empresa/inexistente');
+  const enc = (await db.query(`SELECT encode(pfx_enc, 'escape') AS f, encode(password_enc, 'escape') AS s FROM public.training_signing_certs WHERE owner_id = 'ins-dig'`)).rows[0];
+  ok(enc && !enc.s.includes('SenhaPFX123') && !enc.f.includes('UEZYLUJBU0U2NA'), 'arquivo e senha ficam criptografados no banco');
+  r = await as(db, user(b), `SELECT * FROM public.training_signing_certs`);
+  ok(!!r.error, 'a tabela de certificados digitais NÃO é lida diretamente');
+  r = await as(db, user(b), `SELECT * FROM public.jvm_private_secrets`);
+  ok(!!r.error, 'a chave de criptografia NÃO é lida');
+  r = await as(db, user(b), `SELECT public.jvm_training_signing_key() AS k`);
+  ok(!!r.error, 'a função da chave NÃO pode ser chamada pelo app');
+  r = await as(db, user(b), `SELECT public.jvm_training_signing_certs() AS v`);
+  const list = typeof r.rows?.[0]?.v === 'string' ? JSON.parse(r.rows[0].v) : r.rows?.[0]?.v;
+  ok(Array.isArray(list) && list.length === 1 && list[0].holderName === 'INSTRUTOR DIGITAL' && !JSON.stringify(list).includes('SenhaPFX123') && !('pfx' in list[0]),
+    'lista mostra titular e validade, sem arquivo nem senha');
+  await db.exec(`UPDATE public.users SET role = 'tecnico' WHERE id = 'usr-b'`);
+  r = await as(db, user(b), `SELECT public.jvm_training_signing_material('instructor', 'ins-dig') AS v`);
+  const mat = typeof r.rows?.[0]?.v === 'string' ? JSON.parse(r.rows[0].v) : r.rows?.[0]?.v;
+  ok(mat?.pfx === 'UEZYLUJBU0U2NA==' && mat?.password === 'SenhaPFX123', 'quem emite certificados recebe arquivo e senha para assinar');
+  ok(!!(await db.query(`SELECT last_used_at FROM public.training_signing_certs WHERE owner_id = 'ins-dig'`)).rows[0].last_used_at, 'uso do certificado fica registrado');
+  r = await as(db, user(a), `SELECT public.jvm_training_signing_material('instructor', 'ins-dig') AS v`);
+  ok(!r.error && r.rows[0].v === null, 'outra empresa NÃO obtém o certificado digital');
+  r = await as(db, anon, `SELECT public.jvm_training_signing_material('instructor', 'ins-dig') AS v`);
+  ok(!!r.error, 'anon NÃO obtém o certificado digital');
+  await db.exec(`UPDATE public.users SET allowed_modules = '{ensaios}' WHERE id = 'usr-b'`);
+  r = await as(db, user(b), `SELECT public.jvm_training_signing_material('instructor', 'ins-dig') AS v`);
+  ok(!!r.error, 'usuário sem o módulo Treinamentos NÃO obtém o certificado digital');
+  await db.exec(`UPDATE public.users SET allowed_modules = NULL WHERE id = 'usr-b'`);
+  r = await as(db, user(b), `SELECT public.jvm_training_delete_signing_cert('instructor', 'ins-dig') AS v`);
+  ok(!!r.error, 'técnico NÃO remove certificado digital');
+
   // ---------------------------------------------------------------- perfis
   await db.exec(`INSERT INTO public.users (id, company_id, name, email, role, password_hash) VALUES ('usr-c', 'comp-2', 'Cli', 'cli@x.com', 'cliente', 'Senha@C1')`);
   const c = await uidOf(db, 'usr-c');

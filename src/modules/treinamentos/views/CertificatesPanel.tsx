@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Award, Plus, Download, Link2, Ban, RotateCcw, Trash2, Loader2, Search } from 'lucide-react';
+import { Award, Plus, Download, Link2, Ban, RotateCcw, Trash2, Loader2, Search, FileSpreadsheet } from 'lucide-react';
+import { ImportCertificatesDialog } from './ImportCertificatesDialog';
 import { buildValidationUrl } from '../../../config/validationPortalConfig';
 import { DielectricStorageService } from '../../../services/syncEngine';
 import {
@@ -17,6 +18,7 @@ export const CertificatesPanel: React.FC<{ initialFilter?: Filter }> = ({ initia
   const [filter, setFilter] = useState<Filter>(initialFilter);
   const [query, setQuery] = useState('');
   const [issuing, setIssuing] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const canEdit = canEditTraining();
   const today = todayIso();
@@ -77,6 +79,10 @@ export const CertificatesPanel: React.FC<{ initialFilter?: Filter }> = ({ initia
             {busy === 'lista' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />} Baixar {list.length}
           </button>
         )}
+        {canEdit && <button type="button" className={btnSecondary} onClick={() => {
+          if (!getCourses().length) return window.alert('Cadastre um curso antes de emitir.');
+          setImporting(true);
+        }}><FileSpreadsheet className="w-3.5 h-3.5" /> Importar planilha</button>}
         {canEdit && <button type="button" className={btnPrimary} onClick={() => {
           if (!getCourses().length) return window.alert('Cadastre um curso antes de emitir.');
           setIssuing(true);
@@ -122,6 +128,7 @@ export const CertificatesPanel: React.FC<{ initialFilter?: Filter }> = ({ initia
         </div>
       )}
 
+      {importing && <ImportCertificatesDialog onClose={() => setImporting(false)} />}
       {issuing && <IndividualIssue onClose={() => setIssuing(false)} onIssued={c => download([c], c.id)} />}
     </div>
   );

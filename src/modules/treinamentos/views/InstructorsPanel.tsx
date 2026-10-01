@@ -8,6 +8,7 @@ import {
 import { newId } from '../rules';
 import type { TrainingInstructor } from '../types';
 import { btnPrimary, btnSecondary, cardCls, EmptyState, Field, inputCls, Modal } from './ui';
+import { DigitalCertBadge, DigitalCertBox, useSigningCerts } from './DigitalCertBox';
 
 const emptyInstructor = (): TrainingInstructor => ({
   id: '', companyId: '', createdAt: '', updatedAt: '',
@@ -18,6 +19,9 @@ export const InstructorsPanel: React.FC = () => {
   const [editing, setEditing] = useState<TrainingInstructor | null>(null);
   const [importing, setImporting] = useState(false);
   const instructors = getInstructors();
+  useSigningCerts();
+  const rt = DielectricStorageService.getCompanyInfo()?.technicalResponsible;
+  const [editingRt, setEditingRt] = useState(false);
   const canEdit = canEditTraining();
 
   const handleDelete = (i: TrainingInstructor) => {
@@ -40,6 +44,17 @@ export const InstructorsPanel: React.FC = () => {
         )}
       </div>
 
+      {/* Responsável Técnico (cadastro da empresa): também assina os certificados */}
+      <div className={`${cardCls} p-4 flex flex-wrap items-center justify-between gap-2`}>
+        <div className="min-w-0">
+          <span className="text-[10px] font-bold text-orange-600 uppercase tracking-wide">Responsável Técnico</span>
+          <h4 className="font-bold text-sm text-slate-900">{rt?.name || 'Não cadastrado'}</h4>
+          <p className="text-[11px] text-slate-500">{[rt?.title, rt?.creaNumber].filter(Boolean).join(' · ') || 'Cadastre em Configurações & Backup'}</p>
+          <div className="mt-1"><DigitalCertBadge ownerType="rt" ownerId="rt" /></div>
+        </div>
+        {rt?.name && <button type="button" className={btnSecondary} onClick={() => setEditingRt(true)}>Certificado digital</button>}
+      </div>
+
       {instructors.length === 0 ? (
         <EmptyState icon={GraduationCap} title="Nenhum instrutor cadastrado" text="Cadastre quem ministra os treinamentos. A assinatura pode ser desenhada na tela ou enviada como imagem." />
       ) : (
@@ -51,6 +66,7 @@ export const InstructorsPanel: React.FC = () => {
                   <h4 className="font-bold text-sm text-slate-900">{i.name}{i.active ? '' : ' (inativo)'}</h4>
                   <p className="text-[11px] text-slate-600">{i.qualification || 'Qualificação não informada'}</p>
                   <p className="text-[11px] text-slate-500">{i.registration}</p>
+                  <div className="mt-1"><DigitalCertBadge ownerType="instructor" ownerId={i.id} /></div>
                 </div>
                 {canEdit && (
                   <div className="flex gap-1 shrink-0">
@@ -68,6 +84,12 @@ export const InstructorsPanel: React.FC = () => {
       )}
 
       {editing && <InstructorEditor instructor={editing} onClose={() => setEditing(null)} />}
+      {editingRt && rt?.name && (
+        <Modal title={`Certificado digital — ${rt.name}`} onClose={() => setEditingRt(false)}
+          footer={<button type="button" className={btnSecondary} onClick={() => setEditingRt(false)}>Fechar</button>}>
+          <DigitalCertBox ownerType="rt" ownerId="rt" ownerName={rt.name} />
+        </Modal>
+      )}
       {importing && <ImportFromUsers onClose={() => setImporting(false)} />}
     </div>
   );
@@ -110,6 +132,11 @@ const InstructorEditor: React.FC<{ instructor: TrainingInstructor; onClose: () =
           initialSignature={i.signatureUrl}
           onSave={dataUrl => set('signatureUrl', dataUrl)}
         />
+      </div>
+      <div className="mt-4">
+        {instructor.id
+          ? <DigitalCertBox ownerType="instructor" ownerId={instructor.id} ownerName={i.name} />
+          : <p className="text-[11px] text-slate-500">Salve o instrutor para cadastrar o certificado digital (A1).</p>}
       </div>
     </Modal>
   );

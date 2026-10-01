@@ -2134,6 +2134,178 @@ $$;
 REVOKE ALL ON FUNCTION public.jvm_validar_treinamento(TEXT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.jvm_validar_treinamento(TEXT) TO anon, authenticated;
 
+-- -------------------------------------------------------------------------
+-- CERTIFICADO DIGITAL (A1 .pfx/.p12) DOS INSTRUTORES E DO RT
+-- O arquivo e a senha ficam criptografados (pgcrypto) numa tabela que o app
+-- NÃO lê diretamente; só as funções abaixo os entregam, conferindo empresa,
+-- perfil e acesso ao módulo. Cada uso fica registrado (último uso e por quem).
+-- -------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.jvm_private_secrets (
+  name TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+ALTER TABLE public.jvm_private_secrets ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.jvm_private_secrets FROM PUBLIC, anon, authenticated;
+INSERT INTO public.jvm_private_secrets (name, value)
+VALUES ('training_signing_key', encode(extensions.gen_random_bytes(32), 'hex'))
+ON CONFLICT (name) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS public.training_signing_certs (
+  id TEXT PRIMARY KEY,
+  company_id TEXT NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+  owner_type TEXT NOT NULL CHECK (owner_type IN ('instructor', 'rt')),
+  owner_id TEXT NOT NULL,
+  holder_name TEXT,
+  holder_doc TEXT,
+  issuer TEXT,
+  serial TEXT,
+  valid_from TIMESTAMPTZ,
+  valid_to TIMESTAMPTZ,
+  pfx_enc BYTEA NOT NULL,
+  password_enc BYTEA NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_by UUID,
+  last_used_at TIMESTAMPTZ,
+  last_used_by UUID
+);
+ALTER TABLE public.training_signing_certs ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.training_signing_certs FROM PUBLIC, anon, authenticated;
+
+CREATE OR REPLACE FUNCTION public.jvm_training_signing_key()
+RETURNS TEXT
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT value FROM public.jvm_private_secrets WHERE name = 'training_signing_key'
+$$;
+REVOKE ALL ON FUNCTION public.jvm_training_signing_key() FROM PUBLIC, anon, authenticated;
+
+-- Cadastrar/trocar: administrador ou Responsável Técnico da empresa
+CREATE OR REPLACE FUNCTION public.jvm_training_save_signing_cert(
+  p_owner_type TEXT, p_owner_id TEXT, p_pfx_base64 TEXT, p_password TEXT,
+  p_holder_name TEXT, p_holder_doc TEXT, p_issuer TEXT, p_serial TEXT,
+  p_valid_from TIMESTAMPTZ, p_valid_to TIMESTAMPTZ
+)
+RETURNS JSON
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_company TEXT := public.jvm_my_company();
+  v_owner TEXT := CASE WHEN p_owner_type = 'rt' THEN 'rt' ELSE p_owner_id END;
+  v_key TEXT := public.jvm_training_signing_key();
+BEGIN
+  IF v_company IS NULL OR NOT (public.jvm_is_admin() OR public.jvm_my_role() = 'responsavel_tecnico')
+     OR NOT public.jvm_can_use_module('treinamentos') THEN
+    RAISE EXCEPTION 'Somente o administrador ou o Responsável Técnico cadastra certificados digitais.' USING ERRCODE = '42501';
+  END IF;
+  IF p_owner_type NOT IN ('instructor', 'rt') THEN
+    RAISE EXCEPTION 'Tipo inválido: %', p_owner_type USING ERRCODE = '22023';
+  END IF;
+  IF p_owner_type = 'instructor' AND NOT EXISTS (
+       SELECT 1 FROM public.training_instructors WHERE id = p_owner_id AND company_id = v_company AND deleted_at IS NULL) THEN
+    RAISE EXCEPTION 'Instrutor não encontrado nesta empresa (sincronize e tente de novo).' USING ERRCODE = '22023';
+  END IF;
+  IF COALESCE(p_pfx_base64, '') = '' OR length(p_pfx_base64) > 200000 THEN
+    RAISE EXCEPTION 'Arquivo do certificado inválido.' USING ERRCODE = '22023';
+  END IF;
+  IF COALESCE(p_password, '') = '' THEN
+    RAISE EXCEPTION 'Informe a senha do certificado.' USING ERRCODE = '22023';
+  END IF;
+
+  INSERT INTO public.training_signing_certs AS t (id, company_id, owner_type, owner_id, holder_name, holder_doc, issuer, serial,
+                                                   valid_from, valid_to, pfx_enc, password_enc, updated_at, updated_by)
+  VALUES (v_company || ':' || p_owner_type || ':' || v_owner, v_company, p_owner_type, v_owner, p_holder_name, p_holder_doc, p_issuer,
+          p_serial, p_valid_from, p_valid_to, extensions.pgp_sym_encrypt(p_pfx_base64, v_key),
+          extensions.pgp_sym_encrypt(p_password, v_key), NOW(), auth.uid())
+  ON CONFLICT (id) DO UPDATE SET
+    holder_name = EXCLUDED.holder_name, holder_doc = EXCLUDED.holder_doc, issuer = EXCLUDED.issuer, serial = EXCLUDED.serial,
+    valid_from = EXCLUDED.valid_from, valid_to = EXCLUDED.valid_to, pfx_enc = EXCLUDED.pfx_enc,
+    password_enc = EXCLUDED.password_enc, updated_at = NOW(), updated_by = auth.uid();
+  RETURN json_build_object('ok', true);
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.jvm_training_delete_signing_cert(p_owner_type TEXT, p_owner_id TEXT)
+RETURNS JSON
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_company TEXT := public.jvm_my_company();
+BEGIN
+  IF v_company IS NULL OR NOT (public.jvm_is_admin() OR public.jvm_my_role() = 'responsavel_tecnico') THEN
+    RAISE EXCEPTION 'Somente o administrador ou o Responsável Técnico remove certificados digitais.' USING ERRCODE = '42501';
+  END IF;
+  DELETE FROM public.training_signing_certs
+   WHERE company_id = v_company AND owner_type = p_owner_type
+     AND owner_id = CASE WHEN p_owner_type = 'rt' THEN 'rt' ELSE p_owner_id END;
+  RETURN json_build_object('ok', true);
+END;
+$$;
+
+-- Lista (sem arquivo nem senha): quem tem certificado e a validade
+CREATE OR REPLACE FUNCTION public.jvm_training_signing_certs()
+RETURNS JSON
+LANGUAGE plpgsql STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_company TEXT := public.jvm_my_company();
+BEGIN
+  IF v_company IS NULL OR NOT public.jvm_can_use_module('treinamentos') THEN
+    RETURN '[]'::json;
+  END IF;
+  RETURN COALESCE((
+    SELECT json_agg(json_build_object(
+      'ownerType', owner_type, 'ownerId', owner_id, 'holderName', holder_name, 'holderDoc', holder_doc,
+      'issuer', issuer, 'serial', serial, 'validFrom', valid_from, 'validTo', valid_to,
+      'updatedAt', updated_at, 'lastUsedAt', last_used_at) ORDER BY owner_type, holder_name)
+      FROM public.training_signing_certs WHERE company_id = v_company), '[]'::json);
+END;
+$$;
+
+-- Arquivo + senha para assinar o PDF: quem emite certificados de treinamento
+CREATE OR REPLACE FUNCTION public.jvm_training_signing_material(p_owner_type TEXT, p_owner_id TEXT)
+RETURNS JSON
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_company TEXT := public.jvm_my_company();
+  v_key TEXT := public.jvm_training_signing_key();
+  r public.training_signing_certs%ROWTYPE;
+BEGIN
+  IF v_company IS NULL OR NOT public.jvm_can_write() OR NOT public.jvm_can_use_module('treinamentos') THEN
+    RAISE EXCEPTION 'Sem permissão para assinar certificados.' USING ERRCODE = '42501';
+  END IF;
+  SELECT * INTO r FROM public.training_signing_certs
+   WHERE company_id = v_company AND owner_type = p_owner_type
+     AND owner_id = CASE WHEN p_owner_type = 'rt' THEN 'rt' ELSE p_owner_id END;
+  IF NOT FOUND THEN
+    RETURN NULL;
+  END IF;
+  UPDATE public.training_signing_certs SET last_used_at = NOW(), last_used_by = auth.uid() WHERE id = r.id;
+  RETURN json_build_object(
+    'pfx', extensions.pgp_sym_decrypt(r.pfx_enc, v_key),
+    'password', extensions.pgp_sym_decrypt(r.password_enc, v_key),
+    'holderName', r.holder_name, 'validTo', r.valid_to);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.jvm_training_save_signing_cert(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TIMESTAMPTZ, TIMESTAMPTZ) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.jvm_training_delete_signing_cert(TEXT, TEXT) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.jvm_training_signing_certs() FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.jvm_training_signing_material(TEXT, TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.jvm_training_save_signing_cert(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TIMESTAMPTZ, TIMESTAMPTZ) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.jvm_training_delete_signing_cert(TEXT, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.jvm_training_signing_certs() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.jvm_training_signing_material(TEXT, TEXT) TO authenticated;
+
 -- =========================================================================
 -- FIM DO MÓDULO TREINAMENTOS
 -- =========================================================================
