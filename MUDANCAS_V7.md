@@ -153,9 +153,23 @@ faixas dos ensaios (sem número repetido entre aparelhos).
   certificado (nome do titular, ND, razão, localização e data), no padrão dos leitores de PDF. Confira no Adobe
   Reader ou em https://validar.iti.gov.br. Sem internet ou com certificado vencido, o PDF
   sai sem assinatura digital (com aviso).
-- Limitação: a assinatura é PAdES básica (PKCS#7 destacada, SHA-256). Ela é válida e
-  verificável, mas não inclui a política de assinatura ICP-Brasil (AD-RB) — o validador do
-  ITI pode indicar "sem política". Certificado A3 (token/cartão) não é suportado no navegador.
+- **Padrão ICP-Brasil (DOC-ICP-15.03):** assinatura PAdES `ETSI.CAdES.detached` com a
+  Política de Assinatura **PA_PAdES_AD_RB v1.3** (OID 2.16.76.1.7.1.11.1.3, vigente até
+  22/10/2037). Atributos assinados exigidos pela política: content-type, message-digest,
+  signing-certificate-v2 e identificador da política (com o hash SHA-256 oficial do
+  documento da política e a URI em politicas.icpbrasil.gov.br); SHA-256 com RSA; sem
+  signing-time (a data fica no /M do PDF). OID e hashes conferidos na lista oficial de
+  políticas (LPA_PAdES.der). Conferido também com o OpenSSL ("CMS Verification successful").
+- **Validação no sistema:** no Validador (portal), "Verificar assinatura digital do PDF":
+  envie o PDF e o sistema confere, para cada assinatura, integridade (documento não
+  alterado), assinatura criptográfica, validade do certificado na data, signing-certificate-v2,
+  política ICP-Brasil (OID e hash da LPA) e a cadeia até as ACs Raiz Brasileiras v5/v12
+  (âncoras extraídas do documento oficial da política). Mostra signatário, ND, emissor,
+  cadeia e data, e o botão para consultar o código VAL-TRE impresso no PDF. O arquivo é
+  conferido só no navegador. A revogação (LCR) não é consultada — para o laudo oficial use
+  validar.iti.gov.br. Certificado A3 (token/cartão) não é suportado no navegador.
+- Certificados cuja cadeia não chega à AC Raiz v5 ou v12 (ex.: certificado de teste) aparecem
+  como "assinatura íntegra, mas não confirmada como ICP-Brasil".
 - Requer executar de novo `supabase/modules/treinamentos.sql`.
 
 **Ligar/desligar:** Configurações & Backup → Módulos do sistema (por empresa; os dados

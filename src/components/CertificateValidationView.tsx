@@ -24,6 +24,7 @@ import { lazyView } from '../utils/lazyView';
 import { isTrainingValidationCode } from '../modules/treinamentos/rules';
 
 // Certificados de treinamento (módulo Treinamentos): códigos VAL-TRE-...
+const SignedPdfVerifier = lazyView(() => import('../modules/treinamentos/views/SignedPdfVerifier'), 'SignedPdfVerifier');
 const TrainingValidationResult = lazyView(() => import('../modules/treinamentos/views/TrainingValidationResult'), 'TrainingValidationResult');
 
 interface CertificateValidationViewProps {
@@ -346,6 +347,13 @@ export const CertificateValidationView: React.FC<CertificateValidationViewProps>
             )}
           </div>
         )}
+
+        <div className="mt-6">
+          {/* Assinatura digital do PDF (padrão ICP-Brasil) */}
+          <Suspense fallback={null}>
+            <SignedPdfVerifier onConsultCode={code => { setSearchCode(code); handleSearch(code); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />
+          </Suspense>
+        </div>
       </main>
 
       {/* Footer */}

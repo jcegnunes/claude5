@@ -139,12 +139,45 @@ async function getMaterial(type: SigningOwnerType, ownerId: string) {
   return value;
 }
 
+/** Bloco de assinatura montado com os dados lidos no cadastro do certificado */
+export interface SignatureStamp {
+  /** Nome comum completo do certificado (carimbo) */
+  cn: string;
+  /** ND do titular (carimbo) */
+  dn: string;
+  reason: string;
+  /** Pessoa que assina (e-CPF: titular; e-CNPJ: responsável pelo certificado) */
+  person: string;
+  /** Documento do certificado para a linha abaixo do nome */
+  docLine: string;
+}
+
+const maskCpf = (cpf: string) => {
+  const d = cpf.replace(/\D/g, '');
+  return d.length === 11 ? `***.${d.slice(3, 6)}.${d.slice(6, 9)}-**` : cpf;
+};
+
+/** Monta o bloco de assinatura a partir dos dados gravados no cadastro do certificado. */
+export function stampFromDetails(d: CertDetails, reason: string, fallbackName: string): SignatureStamp {
+  const holder = (d.commonName.split(':')[0] || d.commonName || fallbackName).trim();
+  const isCompany = d.kind === 'e-CNPJ';
+  return {
+    cn: d.commonName || fallbackName,
+    dn: d.subjectDn,
+    reason,
+    person: (isCompany ? d.responsibleName : holder) || fallbackName,
+    docLine: isCompany
+      ? [`e-CNPJ ${holder}`, d.cnpj ? `CNPJ ${d.cnpj}` : ''].filter(Boolean).join(' · ')
+      : (d.cpf ? `e-CPF · CPF ${maskCpf(d.cpf)}` : 'Certificado ICP-Brasil')
+  };
+}
+
 export interface SignaturePlan {
   signers: PdfSigner[];
   /** Nomes impressos com "Assinado digitalmente" */
   names: string[];
   /** Carimbo visível acima do nome de cada assinante (dados lidos do certificado) */
-  stamps: Record<string, { cn: string; dn: string; reason: string }>;
+  stamps: Record<string, SignatureStamp>;
   /** Avisos (certificado vencido, sem internet...) */
   warnings: string[];
 }
@@ -171,16 +204,17 @@ export async function planSignatures(cert: TrainingCertificate): Promise<Signatu
       continue;
     }
     const reason = w.type === 'rt' ? 'Responsável Técnico – certificado de treinamento' : 'Instrutor – certificado de treinamento';
-    let cn = m.holderName || w.label;
-    let dn = '';
-    try {
-      const info = inspectP12(m.p12, m.password);
-      cn = info.commonName || cn;
-      dn = info.subjectDn;
-    } catch { /* usa o nome cadastrado */ }
-    plan.signers.push({ p12: m.p12, password: m.password, name: cn, reason });
+    // dados lidos no cadastro do certificado; cadastros antigos: lê do arquivo agora
+    let details = findSigningCert(w.type, w.id)?.details || null;
+    if (!details) {
+      try { details = inspectP12(m.p12, m.password).details; } catch { details = null; }
+    }
+    const stamp = details
+      ? stampFromDetails(details, reason, w.label)
+      : { cn: m.holderName || w.label, dn: '', reason, person: w.label, docLine: '' };
+    plan.signers.push({ p12: m.p12, password: m.password, name: stamp.cn, reason });
     plan.names.push(w.label);
-    plan.stamps[w.label] = { cn, dn, reason };
+    plan.stamps[w.label] = stamp;
   }
   return plan;
 }

@@ -178,7 +178,7 @@ function drawDigitalStamp(doc: jsPDF, cx: number, lineY: number, width: number, 
   all.forEach(l => { doc.text(l, rightX, ry); ry += rlh; });
 }
 
-function drawSignature(doc: jsPDF, x: number, y: number, width: number, image: string, name: string, line2: string, line3?: string, stamp?: DigitalStamp) {
+function drawSignature(doc: jsPDF, x: number, y: number, width: number, image: string, name: string, line2: string, line3?: string, stamp?: DigitalStamp, line4?: string) {
   if (stamp) {
     drawDigitalStamp(doc, x + width / 2, y, width, stamp);
   } else if (image) {
@@ -196,14 +196,19 @@ function drawSignature(doc: jsPDF, x: number, y: number, width: number, image: s
   doc.setTextColor(...GRAY);
   if (line2) doc.text(doc.splitTextToSize(line2, width - 4)[0], x + width / 2, y + 7.6, { align: 'center' });
   if (line3) doc.text(doc.splitTextToSize(line3, width - 4)[0], x + width / 2, y + 10.8, { align: 'center' });
+  if (line4) {
+    doc.setFontSize(6.6);
+    doc.setTextColor(5, 120, 85);
+    doc.text(doc.splitTextToSize(line4, width - 4)[0], x + width / 2, y + (line3 ? 14 : 10.8), { align: 'center' });
+  }
 }
 
 async function drawCertificate(
   doc: jsPDF, cert: TrainingCertificate, company: CompanyLabInfo, assets: Assets,
-  stamps: Record<string, { cn: string; dn: string; reason: string }> = {}, signedAt: Date = new Date()
+  stamps: Record<string, { cn: string; dn: string; reason: string; person?: string; docLine?: string }> = {}, signedAt: Date = new Date()
 ) {
   const stampLocation = [company.city, company.state].filter(Boolean).join('/') || cityOf(company) || 'Brasil';
-  const digitalNames = Object.keys(stamps);
+  const digitalNames = Object.entries(stamps).map(([label, st]) => st.person || label);
   const w = doc.internal.pageSize.getWidth();
   const h = doc.internal.pageSize.getHeight();
   drawFrame(doc, w, h);
@@ -274,8 +279,13 @@ async function drawCertificate(
   const areaX = 18;
   const areaW = w - 18 - 60; // à direita fica o QR Code
   const colW = areaW / signers.length;
-  signers.forEach((s, i) => drawSignature(doc, areaX + i * colW, sigY, colW, s.image, s.name, s.l2, s.l3,
-    stamps[s.name] ? { ...stamps[s.name], location: stampLocation, at: signedAt } : undefined));
+  signers.forEach((s, i) => {
+    const st = stamps[s.name];
+    // assinado digitalmente: nome e documento conforme o certificado cadastrado
+    drawSignature(doc, areaX + i * colW, sigY, colW, s.image, st?.person || s.name, s.l2, s.l3,
+      st ? { cn: st.cn, dn: st.dn, reason: st.reason, location: stampLocation, at: signedAt } : undefined,
+      st?.docLine);
+  });
 
   // ------------------------------------------------------- QR Code e número
   const url = buildValidationUrl(company.validationBaseUrl, cert.validationCode);

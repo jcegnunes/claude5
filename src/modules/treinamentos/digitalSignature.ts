@@ -217,29 +217,50 @@ export function isCertExpired(info: Pick<SigningCertInfo, 'validTo'>, now = new 
 }
 
 /** Assina o PDF com cada certificado, na ordem (uma atualização incremental por assinatura). */
+/**
+ * Assina o PDF no padrão ICP-Brasil: PAdES (ETSI.CAdES.detached) com a
+ * Política de Assinatura AD-RB (ver pades.ts). Uma atualização incremental por
+ * assinatura, então as anteriores continuam válidas.
+ */
 export async function signPdf(pdf: Uint8Array, signers: PdfSigner[]): Promise<Uint8Array> {
   if (!signers.length) return pdf;
   const { Buffer } = await import('buffer');
   (globalThis as any).Buffer = (globalThis as any).Buffer || Buffer;
-  const [{ plainAddPlaceholder }, { P12Signer }, signpdfModule] = await Promise.all([
+  const [{ plainAddPlaceholder }, utils, signpdfModule, pades] = await Promise.all([
     import('@signpdf/placeholder-plain'),
-    import('@signpdf/signer-p12'),
-    import('@signpdf/signpdf')
+    import('@signpdf/utils'),
+    import('@signpdf/signpdf'),
+    import('./pades')
   ]);
   const signpdf: any = (signpdfModule as any).default || signpdfModule;
+
+  /** Assinante CAdES ICP-Brasil para a biblioteca de PDF. */
+  class IcpBrasilSigner extends (utils as any).Signer {
+    constructor(private loaded: ReturnType<typeof pades.loadP12>) { super(); }
+    async sign(content: Uint8Array) {
+      return Buffer.from(pades.createIcpBrasilCms(new Uint8Array(content), this.loaded));
+    }
+  }
+
   // Buffer do pacote "buffer" (navegador)
   let buf: any = Buffer.from(pdf);
   for (const s of signers) {
+    let loaded: ReturnType<typeof pades.loadP12>;
+    try {
+      loaded = pades.loadP12(s.p12, s.password);
+    } catch {
+      throw new Error('Senha incorreta ou arquivo que não é um certificado A1 (.pfx/.p12).');
+    }
     buf = plainAddPlaceholder({
       pdfBuffer: buf,
       reason: s.reason,
       contactInfo: '',
       name: s.name,
       location: s.location || 'Brasil',
-      signatureLength: 20000
+      signatureLength: 24000,
+      subFilter: (utils as any).SUBFILTER_ETSI_CADES_DETACHED
     });
-    const signer = new P12Signer(Buffer.from(s.p12), { passphrase: s.password });
-    buf = Buffer.from(await signpdf.sign(buf, signer));
+    buf = Buffer.from(await signpdf.sign(buf, new IcpBrasilSigner(loaded)));
   }
   return new Uint8Array(buf);
 }
