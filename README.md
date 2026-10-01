@@ -1,4 +1,4 @@
-# JVM Dielectric Lab — Ensaios & Certificação EPI/EPC (v7.0)
+# JVM Dielectric Lab — Ensaios & Certificação EPI/EPC (v7.2)
 
 Plataforma de ensaios dielétricos, laudos e certificados de EPI/EPC com
 **Supabase como banco de dados único**.
@@ -35,6 +35,24 @@ Depois de executar, no painel do Supabase desative o cadastro público:
 **Authentication → Sign In / Providers → "Allow new users to sign up" = OFF**.
 
 O script fica somente no projeto (pasta `supabase/`): o app não exibe nem contém as configurações do banco.
+
+### Módulos (`supabase/modules/`)
+
+Cada módulo da plataforma tem o próprio script, executado **depois** do `schema.sql`
+(também idempotente). Hoje: `supabase/modules/treinamentos.sql` (certificados de
+treinamento). O `recriar_banco.sql` já inclui todos os módulos.
+
+## Módulos do sistema (`src/modules/`)
+
+Partes independentes da plataforma: cada módulo tem pasta própria (telas, regras, PDF,
+sincronização, testes) e script SQL próprio, e se liga ao app só pelo registro
+`src/modules/registry.ts` (menu e telas) e por `src/modules/storageKeys.ts` (dados no
+aparelho). Pode ser alterado sem mexer nos ensaios e ligado/desligado por empresa em
+**Configurações & Backup → Módulos do sistema**.
+
+| Módulo | Pasta | Banco |
+|---|---|---|
+| Treinamentos (certificados NR-10, NR-35...) | `src/modules/treinamentos` | `supabase/modules/treinamentos.sql` |
 
 ## Como funciona a sincronização
 
@@ -151,7 +169,7 @@ localmente na primeira abertura desta versão e passam a mostrar apenas o que es
 - Ao entrar, dados de outras empresas que estivessem no aparelho são removidos.
 - O banco **recusa** as empresas/usuários de demonstração (`comp-jvm`, `comp-voltsafe`,
   `comp-altatensao`, `usr-1`…), que só versões antigas do app ainda enviam.
-- A tela de login mostra a versão no rodapé (ex.: **"Versão 7.0.0"**): use para conferir se o site publicado
+- A tela de login mostra a versão no rodapé (ex.: **"Versão 7.2.0"**): use para conferir se o site publicado
   está atualizado.
 
 Descobrir quem está gravando no banco (aparelho e horário):

@@ -14,8 +14,12 @@ import { LoginView } from './views/LoginView';
 import { CompanySetupView } from './views/CompanySetupView';
 import { EMPTY_USER } from './services/syncEngine';
 import { lazyView } from './utils/lazyView';
+import { isPortalOnlyHost } from './config/validationPortalConfig';
 import { ModalErrorBoundary } from './components/ModalErrorBoundary';
 import { startPhotoStorage } from './services/photoExternalizer';
+import { PLATFORM_MODULES, isModuleEnabled } from './modules/registry';
+import { canUseModule, getAvailableWorkspaces, loadSavedWorkspace, saveWorkspace, type Workspace } from './modules/workspaces';
+import { ModuleLauncherView } from './views/ModuleLauncherView';
 
 // Telas carregadas sob demanda (arquivos separados)
 const DashboardView = lazyView(() => import('./views/DashboardView'), 'DashboardView');
@@ -55,8 +59,10 @@ export default function App() {
 
   // Check if current URL is a public validation URL like /validar/VAL-JVM-2026-A8B1C4
   const currentPath = window.location.pathname;
-  const isDirectValidation = currentPath.startsWith('/validar');
-  const pathValidationCode = isDirectValidation ? currentPath.split('/validar/')[1]?.split('/')[0] : '';
+  // validador.jvmlab.com.br: qualquer endereço abre só a consulta de certificados
+  const isPortalHost = isPortalOnlyHost(window.location.hostname);
+  const isDirectValidation = isPortalHost || currentPath.startsWith('/validar');
+  const pathValidationCode = currentPath.startsWith('/validar/') ? decodeURIComponent(currentPath.split('/validar/')[1]?.split('/')[0] || '') : '';
 
   // Auth & Multi-Company Login State
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => AuthService.isAuthenticated());
@@ -68,6 +74,34 @@ export default function App() {
     if (storedUser) return storedUser;
     return EMPTY_USER;
   });
+
+  // Módulo escolhido depois do login (Ensaios de EPI, Treinamentos...).
+  // Reabrindo o app com a sessão ativa, volta ao último módulo usado.
+  const [workspaceId, setWorkspaceId] = useState<string | null>(() => {
+    const u = AuthService.getCurrentUser();
+    return u && u.id ? loadSavedWorkspace(u.id) : null;
+  });
+  const availableWorkspaces = isAuthenticated && currentUser.id
+    ? getAvailableWorkspaces(DielectricStorageService.getCompanyInfo(), currentUser)
+    : [];
+  const currentWorkspace = availableWorkspaces.find(w => w.id === workspaceId)
+    || (availableWorkspaces.length === 1 ? availableWorkspaces[0] : undefined);
+  const homeView = currentWorkspace?.home || 'dashboard';
+  const chooseWorkspace = (ws: Workspace) => {
+    saveWorkspace(currentUser.id, ws.id);
+    setWorkspaceId(ws.id);
+    setActiveView(ws.home);
+  };
+  // "Trocar" no menu: volta para a tela de escolha (o último usado fica marcado)
+  const switchWorkspace = availableWorkspaces.length > 1 ? () => setWorkspaceId(null) : undefined;
+
+  // Tela inicial do módulo ao reabrir o app
+  useEffect(() => {
+    if (currentWorkspace && activeView === 'dashboard' && currentWorkspace.home !== 'dashboard') {
+      setActiveView(currentWorkspace.home);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentWorkspace?.id]);
 
   /**
    * Sessão da empresa: remove do aparelho dados de outras empresas e inicia a
@@ -213,6 +247,7 @@ export default function App() {
   const handleLogout = () => {
     AuthService.logout();
     setIsAuthenticated(false);
+    setWorkspaceId(null);
   };
 
   // Trigger manual sync
@@ -280,6 +315,15 @@ export default function App() {
     setActiveView('reports');
   };
 
+  // Telas dos módulos (src/modules): só se o módulo estiver ligado e o perfil tiver acesso
+  const renderModuleView = (prefix: string) => PLATFORM_MODULES
+    .filter(m => activeView === m.id
+      && isModuleEnabled(DielectricStorageService.getCompanyInfo(), m.id)
+      && m.roles.includes(currentUser.role)
+      && canUseModule(currentUser, m.id))
+    // sem dataVersion na chave: a sincronização dos ensaios não fecha o que está sendo editado
+    .map(m => <m.View key={`${prefix}_${m.id}`} />);
+
   // If this device was opened by scanning the remote camera QR code on a mobile phone
   if (mobileCamSessionId) {
     return (
@@ -302,7 +346,7 @@ export default function App() {
       <Suspense fallback={viewFallback}>
       <CertificateValidationView
         initialCode={validationCodeForPortal}
-        onBackToApp={() => {
+        onBackToApp={isPortalHost ? undefined : () => {
           setValidationCodeForPortal('');
           setActiveView('dashboard');
           if (window.history.pushState) {
@@ -322,6 +366,8 @@ export default function App() {
           setNeedsCompanySetup(null);
           setCurrentUser(user);
           setIsAuthenticated(true);
+          // a cada login o usuário escolhe o módulo
+          setWorkspaceId(null);
           setDataVersion(v => v + 1);
         }}
       />
@@ -354,6 +400,20 @@ export default function App() {
     );
   }
 
+  // Depois do login: escolha do módulo do sistema
+  if (!currentWorkspace) {
+    return (
+      <ModuleLauncherView
+        user={currentUser}
+        companyName={DielectricStorageService.getActiveCompany()?.name || ''}
+        workspaces={availableWorkspaces}
+        lastWorkspaceId={loadSavedWorkspace(currentUser.id)}
+        onSelect={chooseWorkspace}
+        onLogout={handleLogout}
+      />
+    );
+  }
+
   // If user is in Android Mode, render the full Android Application Shell
   if (isFieldMode) {
     return (
@@ -382,7 +442,7 @@ export default function App() {
           onLogout={handleLogout}
         >
           {/* Main Content inside Android App Frame (100% of fields and views preserved) */}
-          <ViewErrorBoundary resetKey={activeView} onGoHome={() => setActiveView('dashboard')}>
+          <ViewErrorBoundary resetKey={activeView} onGoHome={() => setActiveView(homeView)}>
           <Suspense fallback={viewFallback}>
           {(activeView === 'dashboard' || activeView === 'android_home') && (
             <AndroidFieldModeView
@@ -480,6 +540,7 @@ export default function App() {
 
           {activeView === 'backup' && <BackupSettingsView key={`android_backup_${dataVersion}`} />}
           {activeView === 'usuarios' && <UsersView key={`android_users_${dataVersion}`} />}
+          {renderModuleView('android')}
           </Suspense>
           </ViewErrorBoundary>
         </AndroidAppShell>
@@ -622,11 +683,13 @@ export default function App() {
           pendingSyncCount={pendingSyncCount}
           onToggleFieldMode={() => setIsFieldMode(!isFieldMode)}
           onOpenInstallModal={() => setIsInstallModalOpen(true)}
+          workspace={currentWorkspace}
+          onSwitchWorkspace={switchWorkspace}
         />
 
         {/* Dynamic Content Canvas */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-          <ViewErrorBoundary resetKey={activeView} onGoHome={() => setActiveView('dashboard')}>
+          <ViewErrorBoundary resetKey={activeView} onGoHome={() => setActiveView(homeView)}>
           <Suspense fallback={viewFallback}>
           {activeView === 'dashboard' && (
             <DashboardView
@@ -720,6 +783,7 @@ export default function App() {
 
           {activeView === 'backup' && <BackupSettingsView key={`desk_backup_${dataVersion}`} />}
           {activeView === 'usuarios' && <UsersView key={`desk_users_${dataVersion}`} />}
+          {renderModuleView('desk')}
           </Suspense>
           </ViewErrorBoundary>
         </main>
@@ -732,6 +796,8 @@ export default function App() {
         onOpenQRScanner={() => setIsQRScannerOpen(true)}
         pendingSyncCount={pendingSyncCount}
         onOpenMenu={() => setIsMobileMenuOpen(true)}
+        homeView={homeView}
+        showTestShortcuts={currentWorkspace.id === 'ensaios'}
       />
 
       {/* Menu com todas as telas (celular): a barra lateral abre como gaveta */}
@@ -745,6 +811,8 @@ export default function App() {
             pendingSyncCount={pendingSyncCount}
             onToggleFieldMode={() => { setIsMobileMenuOpen(false); setIsFieldMode(!isFieldMode); }}
             onOpenInstallModal={() => { setIsMobileMenuOpen(false); setIsInstallModalOpen(true); }}
+            workspace={currentWorkspace}
+            onSwitchWorkspace={switchWorkspace ? () => { setIsMobileMenuOpen(false); switchWorkspace(); } : undefined}
           />
           <button
             type="button"

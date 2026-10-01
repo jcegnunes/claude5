@@ -742,6 +742,8 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
 
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS username TEXT;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS auth_user_id UUID;
+-- Módulos que o usuário pode usar (ex.: {ensaios,treinamentos}); NULL = todos
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS allowed_modules TEXT[];
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_unique
   ON public.users (lower(username))
   WHERE username IS NOT NULL AND username <> '';
@@ -841,11 +843,25 @@ AS $$
   SELECT regexp_replace(COALESCE(public.jvm_my_company(), ''), '[^a-zA-Z0-9_-]', '_', 'g')
 $$;
 
+-- Acesso ao módulo (ensaios, treinamentos...): administradores acessam todos;
+-- os demais, os liberados no cadastro (allowed_modules vazio = todos)
+CREATE OR REPLACE FUNCTION public.jvm_can_use_module(p_module TEXT)
+RETURNS BOOLEAN
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT public.jvm_is_master() OR COALESCE((
+    SELECT u.role = 'admin' OR u.allowed_modules IS NULL OR p_module = ANY (u.allowed_modules)
+      FROM public.users u
+     WHERE u.auth_user_id = auth.uid() AND u.deleted_at IS NULL AND u.active IS NOT FALSE
+     LIMIT 1), false)
+$$;
+
 DO $$
 DECLARE
   f TEXT;
 BEGIN
-  FOREACH f IN ARRAY ARRAY['jvm_my_company()','jvm_my_role()','jvm_is_master()','jvm_is_admin()','jvm_can_write()','jvm_storage_folder()']
+  FOREACH f IN ARRAY ARRAY['jvm_my_company()','jvm_my_role()','jvm_is_master()','jvm_is_admin()','jvm_can_write()','jvm_storage_folder()','jvm_can_use_module(text)']
   LOOP
     EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM PUBLIC, anon', f);
     EXECUTE format('GRANT EXECUTE ON FUNCTION public.%s TO authenticated', f);
@@ -913,6 +929,7 @@ BEGIN
   IF NOT v_admin THEN
     NEW.role := OLD.role;
     NEW.active := OLD.active;
+    NEW.allowed_modules := OLD.allowed_modules;
     NEW.email := OLD.email;
     NEW.username := OLD.username;
     NEW.deleted_at := OLD.deleted_at;
@@ -1402,7 +1419,7 @@ DECLARE
   v_used BIGINT := 0;
   v_last BIGINT;
 BEGIN
-  IF v_company IS NULL OR NOT public.jvm_can_write() THEN
+  IF v_company IS NULL OR NOT public.jvm_can_write() OR NOT public.jvm_can_use_module('ensaios') THEN
     RAISE EXCEPTION 'Sem permissão para reservar numeração.' USING ERRCODE = '42501';
   END IF;
   IF p_kind NOT IN ('test', 'report', 'certificate', 'os') THEN
@@ -1507,6 +1524,7 @@ DO $$
 DECLARE
   t TEXT;
   p RECORD;
+  m TEXT;
 BEGIN
   FOREACH t IN ARRAY ARRAY['companies','users','clients','equipment','service_orders','test_records','lab_instruments','norms','consolidated_reports','audit_logs']
   LOOP
@@ -1518,22 +1536,24 @@ BEGIN
     EXECUTE format('REVOKE ALL ON public.%I FROM anon', t);
   END LOOP;
 
-  -- Dados da empresa (mesmas regras para todas estas tabelas)
+  -- Dados da empresa (mesmas regras para todas estas tabelas). Clientes são
+  -- comuns a todos os módulos; as demais exigem acesso ao módulo Ensaios de EPI.
   FOREACH t IN ARRAY ARRAY['clients','equipment','service_orders','test_records','lab_instruments','consolidated_reports']
   LOOP
+    m := CASE WHEN t = 'clients' THEN 'true' ELSE '(SELECT public.jvm_can_use_module(''ensaios''))' END;
     EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON public.%I TO authenticated', t);
     EXECUTE format($p$CREATE POLICY jvm_select ON public.%I FOR SELECT TO authenticated
-      USING (company_id = (SELECT public.jvm_my_company()) OR (SELECT public.jvm_is_master()))$p$, t);
+      USING ((company_id = (SELECT public.jvm_my_company()) OR (SELECT public.jvm_is_master())) AND %s)$p$, t, m);
     EXECUTE format($p$CREATE POLICY jvm_insert ON public.%I FOR INSERT TO authenticated
       WITH CHECK ((company_id = (SELECT public.jvm_my_company()) OR (SELECT public.jvm_is_master()))
-                  AND (SELECT public.jvm_can_write()))$p$, t);
+                  AND (SELECT public.jvm_can_write()) AND %s)$p$, t, m);
     EXECUTE format($p$CREATE POLICY jvm_update ON public.%I FOR UPDATE TO authenticated
-      USING (company_id = (SELECT public.jvm_my_company()) OR (SELECT public.jvm_is_master()))
+      USING ((company_id = (SELECT public.jvm_my_company()) OR (SELECT public.jvm_is_master())) AND %s)
       WITH CHECK ((company_id = (SELECT public.jvm_my_company()) OR (SELECT public.jvm_is_master()))
-                  AND (SELECT public.jvm_can_write()))$p$, t);
+                  AND (SELECT public.jvm_can_write()) AND %s)$p$, t, m, m);
     EXECUTE format($p$CREATE POLICY jvm_delete ON public.%I FOR DELETE TO authenticated
-      USING ((company_id = (SELECT public.jvm_my_company()) AND (SELECT public.jvm_is_admin()))
-             OR (SELECT public.jvm_is_master()))$p$, t);
+      USING (((company_id = (SELECT public.jvm_my_company()) AND (SELECT public.jvm_is_admin()))
+             OR (SELECT public.jvm_is_master())) AND %s)$p$, t, m);
   END LOOP;
 END $$;
 
@@ -1574,17 +1594,17 @@ GRANT SELECT (
   id, company_id, company_name, name, email, username, role, cargo,
   registration_number, crea_or_cft, phone, active, is_master_admin,
   signature_url, custom_settings, payload, device_id, deleted_at,
-  created_at, updated_at, has_login
+  created_at, updated_at, has_login, allowed_modules
 ) ON public.users TO authenticated;
 GRANT INSERT (
   id, company_id, company_name, name, email, username, role, cargo,
   registration_number, crea_or_cft, phone, active, is_master_admin,
-  signature_url, custom_settings, payload, device_id, deleted_at
+  signature_url, custom_settings, payload, device_id, deleted_at, allowed_modules
 ) ON public.users TO authenticated;
 GRANT UPDATE (
   id, company_id, company_name, name, email, username, role, cargo,
   registration_number, crea_or_cft, phone, active, is_master_admin,
-  signature_url, custom_settings, payload, device_id, deleted_at
+  signature_url, custom_settings, payload, device_id, deleted_at, allowed_modules
 ) ON public.users TO authenticated;
 GRANT DELETE ON public.users TO authenticated;
 

@@ -1,3 +1,4 @@
+import { buildValidationUrl } from '../config/validationPortalConfig';
 import React, { useState, useEffect } from 'react';
 import {
   RefreshCw,
@@ -649,7 +650,7 @@ export const SyncManagerView: React.FC<SyncManagerViewProps> = ({
                   type="text"
                   value={portalUrl}
                   onChange={(e) => setPortalUrl(e.target.value)}
-                  placeholder="https://jvmlab.com.br"
+                  placeholder="https://www.jvmengenharia.com.br/validar?codigo={codigo}"
                   className="w-full px-3 py-2 rounded-xl border border-slate-300 font-mono text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 />
                 <p className="text-[11px] text-slate-500 mt-1">
@@ -663,7 +664,7 @@ export const SyncManagerView: React.FC<SyncManagerViewProps> = ({
                   Validação Pública de Laudos & QR Codes
                 </p>
                 <p className="text-[10px] text-blue-700 leading-relaxed">
-                  Os QR Codes gerados nas etiquetas térmicas Niimbot e nos certificados PDF apontarão para este domínio ({portalUrl}/validar/...). A consulta do laudo é feita diretamente na nuvem da plataforma.
+                  Os QR Codes gerados nas etiquetas térmicas Niimbot e nos certificados PDF apontarão para este endereço (ex.: {buildValidationUrl(portalUrl, 'VAL-JVM-0000-XXXXXXXX')}). A consulta do laudo é feita diretamente na nuvem da plataforma.
                 </p>
               </div>
             </div>

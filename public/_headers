@@ -1,4 +1,6 @@
-# Cabeçalhos de segurança para Cloudflare Pages / Netlify (mesmos do .htaccess)
+# Cabeçalhos de segurança para Cloudflare Pages / Netlify (mesmos do .htaccess, só do SISTEMA).
+# O validador exibido no site Wix precisa dos cabeçalhos por domínio do .htaccess
+# (frame-ancestors liberado para www.jvmengenharia.com.br); aqui isso não é possível.
 /*
   Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https: http:; media-src 'self' data: blob:; connect-src 'self' https: wss: data: blob:; worker-src 'self' blob:; frame-src 'self' blob: data:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'
   X-Content-Type-Options: nosniff

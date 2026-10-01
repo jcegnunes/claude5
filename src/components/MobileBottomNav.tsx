@@ -8,6 +8,10 @@ interface MobileBottomNavProps {
   pendingSyncCount: number;
   /** Abre o menu com todas as telas. */
   onOpenMenu?: () => void;
+  /** Tela inicial do módulo escolhido (padrão: dashboard dos ensaios) */
+  homeView?: string;
+  /** Atalhos de EPI/EPC e Novo Ensaio (só no módulo Ensaios de EPI) */
+  showTestShortcuts?: boolean;
 }
 
 export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
@@ -15,20 +19,23 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   onNavigate,
   onOpenQRScanner,
   pendingSyncCount,
-  onOpenMenu
+  onOpenMenu,
+  homeView = 'dashboard',
+  showTestShortcuts = true
 }) => {
   return (
     <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#0A2540] border-t border-slate-800 text-white flex items-center justify-around h-16 px-2 shadow-2xl safe-area-pb">
       <button
-        onClick={() => onNavigate('dashboard')}
+        onClick={() => onNavigate(homeView)}
         className={`flex flex-col items-center justify-center flex-1 min-w-0 h-full gap-1 ${
-          activeView === 'dashboard' ? 'text-orange-400 font-bold' : 'text-slate-400'
+          activeView === homeView ? 'text-orange-400 font-bold' : 'text-slate-400'
         }`}
       >
         <LayoutDashboard className="w-5 h-5" />
         <span className="text-[10px]">Início</span>
       </button>
 
+      {showTestShortcuts && (
       <button
         onClick={() => onNavigate('equipment')}
         className={`flex flex-col items-center justify-center flex-1 min-w-0 h-full gap-1 ${
@@ -38,6 +45,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         <Shield className="w-5 h-5" />
         <span className="text-[10px]">EPI/EPC</span>
       </button>
+      )}
 
       {/* Central QR Code Scanner Button */}
       <button
@@ -48,6 +56,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         <QrCode className="w-6 h-6" />
       </button>
 
+      {showTestShortcuts && (
       <button
         onClick={() => onNavigate('wizard')}
         className={`flex flex-col items-center justify-center flex-1 min-w-0 h-full gap-1 ${
@@ -57,6 +66,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         <FlaskConical className="w-5 h-5" />
         <span className="text-[10px]">Ensaio</span>
       </button>
+      )}
 
       <button
         onClick={() => onNavigate('sync')}

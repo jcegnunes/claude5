@@ -7,7 +7,7 @@
  */
 import { DielectricStorageService } from './syncEngine';
 
-import { DEFAULT_VALIDATION_BASE_URL, normalizeValidationBaseUrl } from '../config/validationPortalConfig';
+import { DEFAULT_VALIDATION_BASE_URL, buildValidationUrl, normalizeValidationBaseUrl, CODE_PLACEHOLDER } from '../config/validationPortalConfig';
 
 export { DEFAULT_VALIDATION_BASE_URL, normalizeValidationBaseUrl };
 
@@ -29,12 +29,13 @@ export class ValidationPortalService {
   }
 
   static buildPublicValidationUrl(validationCode: string): string {
-    return `${this.getValidationBaseUrl()}/validar/${encodeURIComponent(validationCode || '')}`;
+    return buildValidationUrl(this.getValidationBaseUrl(), validationCode);
   }
 
   /** Verifica se o domínio do portal público responde (hospedagem do app). */
   static async testPortal(targetUrl?: string): Promise<PortalConnectionResult> {
-    const url = normalizeValidationBaseUrl(targetUrl || this.getValidationBaseUrl());
+    // modelo com {codigo}: testa a página sem o código
+    const url = normalizeValidationBaseUrl(targetUrl || this.getValidationBaseUrl()).split('?')[0].split(CODE_PLACEHOLDER).join('');
     const start = performance.now();
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);

@@ -1,7 +1,7 @@
 {
   "name": "jvm-dielectric-lab",
   "private": true,
-  "version": "7.0.0",
+  "version": "7.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 3000",

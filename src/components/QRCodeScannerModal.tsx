@@ -1,14 +1,15 @@
+import { extractValidationCode } from '../config/validationPortalConfig';
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  QrCode, 
-  Camera, 
-  X, 
-  Search, 
-  Check, 
-  AlertCircle, 
-  ArrowRight, 
-  Upload, 
-  SwitchCamera, 
+import {
+  QrCode,
+  Camera,
+  X,
+  Search,
+  Check,
+  AlertCircle,
+  ArrowRight,
+  Upload,
+  SwitchCamera,
   RefreshCw,
   ExternalLink,
   HelpCircle
@@ -136,14 +137,14 @@ export const QRCodeScannerModal: React.FC<QRCodeScannerModalProps> = ({
 
         // Attempt 1: If cameras list exists, use back camera or index
         if (cameras.length > 0) {
-          const backCam = cameras.find(c => 
-            c.label.toLowerCase().includes('back') || 
-            c.label.toLowerCase().includes('traseira') || 
-            c.label.toLowerCase().includes('rear') || 
+          const backCam = cameras.find(c =>
+            c.label.toLowerCase().includes('back') ||
+            c.label.toLowerCase().includes('traseira') ||
+            c.label.toLowerCase().includes('rear') ||
             c.label.toLowerCase().includes('environment')
           );
           const targetCamId = backCam ? backCam.id : cameras[selectedCameraIndex % cameras.length].id;
-          
+
           try {
             await scanner.start(targetCamId, qrConfig, onScanSuccess, onScanFailure);
             started = true;
@@ -183,7 +184,7 @@ export const QRCodeScannerModal: React.FC<QRCodeScannerModalProps> = ({
         console.warn('Camera start error:', err);
         setIsInitializing(false);
         setScanning(false);
-        
+
         const errMsg = err?.message || String(err);
         setErrorDetails(errMsg);
 
@@ -211,11 +212,11 @@ export const QRCodeScannerModal: React.FC<QRCodeScannerModalProps> = ({
   const handleDecodedText = (text: string) => {
     const clean = text.trim();
     if (!clean) return;
-    
-    // Check if it's a URL (e.g. /validar/VAL-JVM-2026-XXXXXX)
-    if (clean.includes('/validar/')) {
-      const parts = clean.split('/validar/');
-      const code = parts[1]?.split('?')[0]?.split('/')[0] || clean;
+
+    // Link de validação: .../validar/CODIGO ou .../validar?codigo=CODIGO (site no Wix)
+    const linkCode = extractValidationCode(clean);
+    if (linkCode) {
+      const code = linkCode;
       const test = DielectricStorageService.getTestById(code);
       setScanResult({
         type: 'certificate',
@@ -228,9 +229,9 @@ export const QRCodeScannerModal: React.FC<QRCodeScannerModalProps> = ({
 
     // Check if it's equipment by UUID, tag or qrCode field
     const allEq = DielectricStorageService.getEquipment();
-    const foundEq = allEq.find(e => 
-      e.qrCode === clean || 
-      e.uuid === clean || 
+    const foundEq = allEq.find(e =>
+      e.qrCode === clean ||
+      e.uuid === clean ||
       e.tag.toLowerCase() === clean.toLowerCase() ||
       e.serialNumber.toLowerCase() === clean.toLowerCase()
     );
@@ -294,7 +295,7 @@ export const QRCodeScannerModal: React.FC<QRCodeScannerModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
       <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[92vh] border border-slate-200">
-        
+
         {/* Header */}
         <div className="bg-[#0A2540] text-white px-5 py-4 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
@@ -316,10 +317,10 @@ export const QRCodeScannerModal: React.FC<QRCodeScannerModalProps> = ({
 
         {/* Content */}
         <div className="p-4 sm:p-5 flex-1 overflow-y-auto space-y-4">
-          
+
           {/* Scanner Viewport */}
           <div className="relative bg-slate-950 rounded-2xl overflow-hidden min-h-[260px] flex items-center justify-center border-2 border-slate-800 shadow-inner">
-            
+
             {/* Realtime QR Container */}
             <div id={qrReaderId} className="w-full h-full min-h-[260px]" />
 
@@ -353,7 +354,7 @@ export const QRCodeScannerModal: React.FC<QRCodeScannerModalProps> = ({
                 <div className="w-12 h-12 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30">
                   <AlertCircle className="w-6 h-6" />
                 </div>
-                
+
                 <div className="max-w-xs space-y-1">
                   <p className="text-xs font-bold text-white">Câmera em Tempo Real Bloqueada</p>
                   <p className="text-[11px] text-slate-300 leading-relaxed">{cameraError}</p>
@@ -396,21 +397,21 @@ export const QRCodeScannerModal: React.FC<QRCodeScannerModalProps> = ({
           </div>
 
           {/* Hidden inputs for Native Camera & Gallery Photo scan */}
-          <input 
+          <input
             ref={nativeCameraInputRef}
-            type="file" 
-            accept="image/*" 
+            type="file"
+            accept="image/*"
             capture="environment"
-            className="hidden" 
-            onChange={handleFileUpload} 
+            className="hidden"
+            onChange={handleFileUpload}
           />
 
-          <input 
+          <input
             ref={galleryInputRef}
-            type="file" 
-            accept="image/*" 
-            className="hidden" 
-            onChange={handleFileUpload} 
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleFileUpload}
           />
 
           <div id="file-qr-temp" className="hidden" />
@@ -456,8 +457,8 @@ export const QRCodeScannerModal: React.FC<QRCodeScannerModalProps> = ({
           {/* Scanned Result Banner */}
           {scanResult && (
             <div className={`p-4 rounded-2xl border ${
-              scanResult.type === 'equipment' 
-                ? 'bg-blue-50 border-blue-200' 
+              scanResult.type === 'equipment'
+                ? 'bg-blue-50 border-blue-200'
                 : scanResult.type === 'certificate'
                 ? 'bg-emerald-50 border-emerald-200'
                 : 'bg-amber-50 border-amber-200'

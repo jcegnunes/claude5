@@ -12,6 +12,9 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SCHEMA = fs.readFileSync(path.join(HERE, '..', 'schema.sql'), 'utf8');
 // Banco criado pela versão 6.5 (políticas liberadas + login jvm_login): testa a migração
 const OLD_SCHEMA = fs.readFileSync(path.join(HERE, 'fixtures', 'schema_v6.5.sql'), 'utf8');
+// Módulos independentes (executados depois do schema.sql)
+const MODULES = fs.readdirSync(path.join(HERE, '..', 'modules')).filter(f => f.endsWith('.sql')).sort()
+  .map(f => fs.readFileSync(path.join(HERE, '..', 'modules', f), 'utf8')).join('\n');
 
 const STUBS = `
 CREATE ROLE anon NOLOGIN; CREATE ROLE authenticated NOLOGIN;
@@ -79,6 +82,10 @@ async function main() {
   await db.exec(SCHEMA);
   await db.exec(SCHEMA); // idempotente
   ok(true, 'schema.sql executa 2x em banco novo sem erro');
+  await db.exec(MODULES);
+  await db.exec(MODULES);
+  await db.exec(SCHEMA); // o schema da plataforma não desfaz os módulos
+  ok(true, 'módulos (supabase/modules) executam 2x sem erro');
 
   // primeiro usuário (SQL Editor) sem empresa
   await db.exec(`INSERT INTO public.users (id, name, email, username, role, password_hash)
@@ -195,6 +202,77 @@ async function main() {
   ok(!/José da Silva|MAT-555|observação interna|signatureImage":"data:x|base64,AAAA|hipot/.test(pubText),
     'portal NÃO devolve colaborador, fotos, assinatura do cliente, instrumentos nem observações internas');
   ok(pub?.test?.payload?.measuredLeakageCurrent_mA === undefined, 'portal NÃO devolve as medições detalhadas');
+
+  // ------------------------------------------------- módulo treinamentos
+  r = await as(db, user(b), `INSERT INTO public.training_courses (id, company_id, name, workload_hours, validity_months, payload)
+                            VALUES ('crs-1', 'comp-2', 'NR-10 Básico', 40, 24, '{}')`);
+  ok(!r.error, `treinamentos: técnico cadastra curso da própria empresa ${r.error || ''}`);
+  r = await as(db, user(b), `INSERT INTO public.training_courses (id, company_id, name) VALUES ('crs-x', 'comp-1', 'Invasão')`);
+  ok(!!r.error, 'treinamentos: NÃO grava curso em outra empresa');
+  r = await as(db, user(a), `SELECT id FROM public.training_courses`);
+  ok(r.rows.length === 0, 'treinamentos: outra empresa não enxerga os cursos');
+  for (const t of ['training_courses', 'training_instructors', 'training_classes', 'training_certificates']) {
+    r = await as(db, anon, `SELECT * FROM public.${t} LIMIT 1`);
+    ok(!!r.error, `anon NÃO lê ${t}`);
+  }
+  const certPayload = { normReference: 'NR-10', workloadHours: 40, startDate: '2026-10-01', endDate: '2026-10-05',
+    instructorNames: ['Instrutor Um'], participantPhone: '(11) 99999-0000', grade: 9.5, attendance: 100 };
+  r = await as(db, user(b), `INSERT INTO public.training_certificates (id, company_id, certificate_number, validation_code, course_name, participant_name, participant_cpf, participant_company, issue_date, expiry_date, status, payload)
+    VALUES ('tc-1', 'comp-2', 'TRE-2610-0001', 'VAL-TRE-2610-ABCD2345', 'NR-10 Básico', 'Maria Souza', '123.456.789-01', 'Cliente X', '2026-10-05', '2028-10-05', 'valido', $1)`, [JSON.stringify(certPayload)]);
+  ok(!r.error, `treinamentos: técnico emite certificado ${r.error || ''}`);
+  r = await as(db, user(b), `INSERT INTO public.training_certificates (id, company_id, validation_code, participant_name) VALUES ('tc-2', 'comp-2', 'VAL-TRE-2610-ABCD2345', 'Outro')`);
+  ok(!!r.error, 'treinamentos: código de validação não se repete');
+  r = await as(db, anon, `SELECT public.jvm_validar_treinamento('val-tre-2610-abcd2345') AS v`);
+  const tv = typeof r.rows?.[0]?.v === 'string' ? JSON.parse(r.rows[0].v) : r.rows?.[0]?.v;
+  const tvText = JSON.stringify(tv || {});
+  ok(tv?.certificate?.participantName === 'Maria Souza' && tv?.certificate?.courseName === 'NR-10 Básico' && tv?.company?.name === 'Empresa 2',
+    'portal valida o certificado de treinamento (anon)');
+  ok(tv?.certificate?.participantCpfMasked === '***.456.789-**' && !tvText.includes('123.456') && !tvText.includes('12345678901'),
+    'portal mostra o CPF mascarado (LGPD)');
+  ok(!/99999-0000|"grade"|"attendance"/.test(tvText), 'portal NÃO devolve telefone, nota nem presença');
+  r = await as(db, anon, `SELECT public.jvm_validar_treinamento('TRE-2610-0001') AS v`);
+  ok(r.rows?.[0]?.v === null, 'portal NÃO aceita o número sequencial do certificado');
+  r = await as(db, user(b), `SELECT public.jvm_training_reserve_numbers('certificate', '2610', 10, 0) AS v`);
+  const rn = typeof r.rows?.[0]?.v === 'string' ? JSON.parse(r.rows[0].v) : r.rows?.[0]?.v;
+  ok(rn?.start === 2 && rn?.end === 11, `numeração de certificados continua após os já emitidos ${JSON.stringify(rn || r.error)}`);
+  r = await as(db, user(b), `SELECT public.jvm_training_reserve_numbers('certificate', '2610', 5, 0) AS v`);
+  const rn2 = typeof r.rows?.[0]?.v === 'string' ? JSON.parse(r.rows[0].v) : r.rows?.[0]?.v;
+  ok(rn2?.start === 12, 'segunda reserva não repete números');
+  r = await as(db, anon, `SELECT public.jvm_training_reserve_numbers('certificate', '2610', 5, 0) AS v`);
+  ok(!!r.error, 'anon NÃO reserva numeração de treinamentos');
+  r = await as(db, user(b), `DELETE FROM public.training_certificates WHERE id = 'tc-1'`);
+  ok(!r.error && r.count === 0, 'técnico NÃO apaga certificado (só administrador)');
+
+  // ------------------------------------------------- acesso por módulo
+  r = await as(db, user(b), `UPDATE public.users SET allowed_modules = '{ensaios,treinamentos}' WHERE id = 'usr-b'`);
+  await as(db, user(b), `UPDATE public.users SET allowed_modules = '{treinamentos}' WHERE id = 'usr-b'`);
+  ok((await db.query(`SELECT allowed_modules FROM public.users WHERE id='usr-b'`)).rows[0].allowed_modules === null,
+    'técnico NÃO altera os próprios módulos liberados');
+  await db.exec(`UPDATE public.users SET allowed_modules = '{treinamentos}' WHERE id = 'usr-b'`);
+  r = await as(db, user(b), `SELECT id FROM public.test_records`);
+  ok(!r.error && r.rows.length === 0, 'usuário só de Treinamentos NÃO enxerga os ensaios');
+  r = await as(db, user(b), `INSERT INTO public.equipment (id, company_id, uuid, type, tag) VALUES ('eq-mod', 'comp-2', 'u-mod', 'luva', 'T-MOD')`);
+  ok(!!r.error, 'usuário só de Treinamentos NÃO grava equipamentos');
+  r = await as(db, user(b), `SELECT public.jvm_reserve_numbers('test', '2610', 5, 0) AS v`);
+  ok(!!r.error, 'usuário só de Treinamentos NÃO reserva numeração de ensaios');
+  r = await as(db, user(b), `SELECT id FROM public.clients`);
+  ok(!r.error && r.rows.some(x => x.id === 'cli-2'), 'clientes continuam visíveis (comuns aos módulos)');
+  r = await as(db, user(b), `SELECT id FROM public.training_courses`);
+  ok(!r.error && r.rows.some(x => x.id === 'crs-1'), 'usuário só de Treinamentos enxerga os cursos');
+  await db.exec(`UPDATE public.users SET allowed_modules = '{ensaios}' WHERE id = 'usr-b'`);
+  r = await as(db, user(b), `SELECT id FROM public.training_courses`);
+  ok(!r.error && r.rows.length === 0, 'usuário só de Ensaios NÃO enxerga os treinamentos');
+  r = await as(db, user(b), `INSERT INTO public.training_courses (id, company_id, name) VALUES ('crs-mod', 'comp-2', 'X')`);
+  ok(!!r.error, 'usuário só de Ensaios NÃO grava cursos');
+  r = await as(db, user(b), `SELECT public.jvm_training_reserve_numbers('certificate', '2610', 5, 0) AS v`);
+  ok(!!r.error, 'usuário só de Ensaios NÃO reserva numeração de certificados de treinamento');
+  r = await as(db, user(b), `SELECT id FROM public.test_records`);
+  ok(!r.error && r.rows.length > 0, 'usuário só de Ensaios enxerga os ensaios');
+  r = await as(db, user(b), `INSERT INTO public.equipment (id, company_id, uuid, type, tag) VALUES ('eq-mod', 'comp-2', 'u-mod', 'luva', 'T-MOD')`);
+  ok(!r.error, `usuário de Ensaios grava equipamentos ${r.error || ''}`);
+  r = await as(db, user(b), `SELECT allowed_modules FROM public.users WHERE id = 'usr-b'`);
+  ok(!r.error && JSON.stringify(r.rows[0].allowed_modules) === '["ensaios"]', 'o app lê os módulos liberados do usuário');
+  await db.exec(`UPDATE public.users SET allowed_modules = NULL WHERE id = 'usr-b'`);
 
   // ---------------------------------------------------------------- perfis
   await db.exec(`INSERT INTO public.users (id, company_id, name, email, role, password_hash) VALUES ('usr-c', 'comp-2', 'Cli', 'cli@x.com', 'cliente', 'Senha@C1')`);
@@ -394,6 +472,7 @@ async function main() {
     await old.exec(`INSERT INTO public.companies (id, name) VALUES ('comp-old', 'Antiga')`);
     await old.exec(`INSERT INTO public.users (id, company_id, name, email, role, password_hash) VALUES ('usr-old', 'comp-old', 'Old', 'Old@X.com', 'tecnico', 'SenhaAntiga1')`);
     await old.exec(SCHEMA);
+    await old.exec(MODULES);
     const ou = (await old.query(`SELECT u.auth_user_id, (a.encrypted_password = extensions.crypt('SenhaAntiga1', a.encrypted_password)) AS ok
                                    FROM public.users u JOIN auth.users a ON a.id = u.auth_user_id WHERE u.id = 'usr-old'`)).rows[0];
     ok(ou?.ok, 'banco antigo: usuário existente ganha conta de login com a MESMA senha');

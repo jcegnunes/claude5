@@ -5,6 +5,7 @@ import { DielectricStorageService } from '../services/syncEngine';
 import { SupabaseService } from '../services/supabaseService';
 import { AuthService } from '../services/authService';
 import { QuickTechnicianModal } from './QuickTechnicianModal';
+import { getAssignableModules } from '../modules/workspaces';
 
 export const ROLE_LABEL: Record<UserRole, string> = {
   admin: 'Administrador',
@@ -170,6 +171,11 @@ export const CompanyUsersPanel: React.FC<CompanyUsersPanelProps> = ({ onChange }
                     <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-600">Sem acesso (só nos laudos)</span>
                   )}
                   {inactive && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-800 border border-red-200">Inativo</span>}
+                  {user.hasLogin && user.role !== 'admin' && !user.isMasterAdmin && Array.isArray(user.allowedModules) && (
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-orange-50 text-orange-800 border border-orange-200">
+                      Só {getAssignableModules(DielectricStorageService.getCompanyInfo()).filter(o => user.allowedModules!.includes(o.id)).map(o => o.label).join(' + ') || 'nenhum módulo'}
+                    </span>
+                  )}
                 </div>
                 <p className="text-[11px] text-slate-500 mt-0.5 truncate">
                   {[
@@ -257,11 +263,52 @@ const DialogShell: React.FC<{ title: string; onClose: () => void; children: Reac
   </div>
 );
 
+/** Valor do formulário -> cadastro: todos marcados = null (inclui módulos futuros). */
+function modulesToValue(selected: string[], options: Array<{ id: string }>): string[] | null {
+  return options.every(o => selected.includes(o.id)) ? null : selected;
+}
+
+/** Módulos do sistema que o usuário pode usar (administrador: todos). */
+const ModuleAccessField: React.FC<{ role: UserRole; selected: string[]; onChange: (ids: string[]) => void }> = ({ role, selected, onChange }) => {
+  const options = getAssignableModules(DielectricStorageService.getCompanyInfo());
+  if (role === 'admin') {
+    return <p className="text-[11px] text-slate-500 sm:col-span-2">Administrador acessa todos os módulos do sistema.</p>;
+  }
+  return (
+    <fieldset className="sm:col-span-2">
+      <legend className={label}>Módulos com acesso *</legend>
+      <div className="flex flex-wrap gap-2">
+        {options.map(o => {
+          const on = selected.includes(o.id);
+          return (
+            <label key={o.id} className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-semibold cursor-pointer ${on ? 'bg-blue-50 border-blue-300 text-blue-800' : 'bg-white border-slate-300 text-slate-600'}`}>
+              <input
+                type="checkbox"
+                checked={on}
+                onChange={e => onChange(e.target.checked ? [...selected, o.id] : selected.filter(id => id !== o.id))}
+              />
+              {o.label}
+            </label>
+          );
+        })}
+      </div>
+      <p className="text-[10px] text-slate-500 mt-1">O usuário só vê e só grava dados dos módulos marcados.</p>
+    </fieldset>
+  );
+};
+
+/** Módulos marcados no formulário a partir do cadastro (null = todos). */
+function initialModules(user?: User): string[] {
+  const all = getAssignableModules(DielectricStorageService.getCompanyInfo()).map(o => o.id);
+  return Array.isArray(user?.allowedModules) ? user!.allowedModules!.filter(id => all.includes(id)) : all;
+}
+
 const ErrorBox: React.FC<{ message: string | null }> = ({ message }) =>
   message ? <p className="p-2 rounded-lg bg-red-50 border border-red-200 text-red-800 text-xs" role="alert">{message}</p> : null;
 
 const CreateUserDialog: React.FC<{ onClose: () => void; onDone: (u: User) => void }> = ({ onClose, onDone }) => {
   const [form, setForm] = useState({ name: '', email: '', username: '', role: 'tecnico' as UserRole, cargo: '', registration: '', phone: '', password: '', confirm: '' });
+  const [modules, setModules] = useState<string[]>(() => initialModules());
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm({ ...form, [k]: e.target.value });
@@ -273,6 +320,7 @@ const CreateUserDialog: React.FC<{ onClose: () => void; onDone: (u: User) => voi
     if (form.username && !/^[a-z0-9._-]{3,40}$/i.test(form.username.trim())) return setError('Nome de usuário: de 3 a 40 letras, números, ponto, hífen ou sublinhado.');
     const pwdError = validatePassword(form.password, form.confirm);
     if (pwdError) return setError(pwdError);
+    if (form.role !== 'admin' && modules.length === 0) return setError('Marque pelo menos um módulo do sistema.');
     setSaving(true);
     setError(null);
     const res = await SupabaseService.adminCreateUser({
@@ -287,6 +335,12 @@ const CreateUserDialog: React.FC<{ onClose: () => void; onDone: (u: User) => voi
     });
     setSaving(false);
     if (!res.success || !res.user) return setError(res.error || 'Não foi possível cadastrar.');
+    const allowed = form.role === 'admin' ? null : modulesToValue(modules, getAssignableModules(DielectricStorageService.getCompanyInfo()));
+    if (allowed) {
+      // restrição gravada no cadastro e enviada ao servidor
+      const saved = DielectricStorageService.saveUser({ ...res.user, allowedModules: allowed });
+      return onDone(saved);
+    }
     onDone(res.user);
   };
 
@@ -336,6 +390,7 @@ const CreateUserDialog: React.FC<{ onClose: () => void; onDone: (u: User) => voi
             <label className={label} htmlFor="nu-confirma">Confirmar senha *</label>
             <input id="nu-confirma" type="password" className={input} value={form.confirm} onChange={set('confirm')} autoComplete="new-password" />
           </div>
+          <ModuleAccessField role={form.role} selected={modules} onChange={setModules} />
         </div>
         <p className="text-[11px] text-slate-500">Mínimo de 8 caracteres, com letras e números. Informe a senha ao usuário por um canal seguro.</p>
         <ErrorBox message={error} />
@@ -422,6 +477,7 @@ const EditUserDialog: React.FC<{ user: User; canChangeRole: boolean; onClose: ()
     creaOrCft: user.creaOrCft || '',
     phone: user.phone || ''
   });
+  const [modules, setModules] = useState<string[]>(() => initialModules(user));
   const [error, setError] = useState<string | null>(null);
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm({ ...form, [k]: e.target.value });
 
@@ -429,6 +485,8 @@ const EditUserDialog: React.FC<{ user: User; canChangeRole: boolean; onClose: ()
     e.preventDefault();
     if (!form.name.trim()) return setError('Informe o nome.');
     if (!user.hasLogin && form.email && !isValidLoginEmail(form.email)) return setError('E-mail inválido.');
+    const role = canChangeRole ? form.role : user.role;
+    if (role !== 'admin' && modules.length === 0) return setError('Marque pelo menos um módulo do sistema.');
     const updated: User = {
       ...user,
       name: form.name.trim(),
@@ -438,7 +496,8 @@ const EditUserDialog: React.FC<{ user: User; canChangeRole: boolean; onClose: ()
       cargo: form.cargo.trim() || undefined,
       creaOrCft: form.creaOrCft.trim() || undefined,
       registrationNumber: form.creaOrCft.trim() || user.registrationNumber,
-      phone: form.phone.trim() || undefined
+      phone: form.phone.trim() || undefined,
+      allowedModules: role === 'admin' ? null : modulesToValue(modules, getAssignableModules(DielectricStorageService.getCompanyInfo()))
     };
     DielectricStorageService.saveUser(updated);
     onDone(updated);
@@ -476,6 +535,7 @@ const EditUserDialog: React.FC<{ user: User; canChangeRole: boolean; onClose: ()
             <label className={label} htmlFor="ed-telefone">Telefone</label>
             <input id="ed-telefone" className={input} value={form.phone} onChange={set('phone')} />
           </div>
+          {user.hasLogin && <ModuleAccessField role={canChangeRole ? form.role : user.role} selected={modules} onChange={setModules} />}
         </div>
         <ErrorBox message={error} />
         <div className="flex justify-end gap-2 pt-1">

@@ -7,6 +7,8 @@
    - cria as contas de login (Supabase Auth) para todos os usuários que já têm senha,
      **com a mesma senha de antes**;
    - troca as regras de acesso abertas pelas regras por empresa.
+
+   Em seguida execute `supabase/modules/treinamentos.sql` (módulo Treinamentos).
 3. **Desative o cadastro público**: Authentication → Sign In / Providers →
    *Allow new users to sign up* = **OFF**.
 4. **Publique o app novo** (`publicar.bat` → AI Studio → Pull, ou o site na Hostinger).
@@ -16,22 +18,120 @@
 > que estiverem só na fila de um aparelho antigo continuam guardados nele e são enviados
 > quando o aparelho abrir a versão nova e o usuário entrar.
 
-## Endereço da plataforma: https://jvmlab.com.br
+## Endereços da plataforma
 
-O app, os QR Codes de laudos/certificados/etiquetas e o portal `/validar/CÓDIGO` passam a
-usar **https://jvmlab.com.br**. O endereço antigo da Hostinger
-(`mediumvioletred-bison-595566.hostingersite.com`) **será desativado**; aparelhos e cadastros
-que ainda o tenham salvo são convertidos automaticamente para o novo.
+| Uso | Endereço |
+|---|---|
+| Sistema (login, ensaios, laudos, cadastros) | **https://jvmlab.com.br** |
+| Validação no site da JVM (QR Code) | **https://www.jvmengenharia.com.br/validar?codigo=CÓDIGO** |
+| Validador (exibido dentro da página do Wix) | **https://validador.jvmlab.com.br** |
 
-1. **Hostinger → Domínios:** aponte `jvmlab.com.br` (e `www`) para a hospedagem do site e
-   ative o **SSL** (HTTPS é obrigatório para instalar o app e usar a câmera).
-2. Publique o build do app nesse domínio (mesmos arquivos de antes, com o `.htaccess`).
-3. **Documentos já impressos com o QR Code antigo:** com o endereço antigo desativado, o
-   QR Code deles deixa de abrir. A autenticidade continua verificável: o cliente acessa
-   `https://jvmlab.com.br/validar` e digita o **código de validação** impresso no documento.
-   Se preferir, reemita os documentos ou etiquetas ainda em uso.
+- Os QR Codes de certificados, laudos e etiquetas apontam para a página **/validar** do site
+  da JVM no Wix, que mostra o validador (`validador.jvmlab.com.br`) dentro dela.
+- O leitor de QR Code do app entende os dois formatos (`?codigo=` e `/validar/CÓDIGO`).
+- No `validador`, qualquer endereço abre **somente** a consulta de certificados: a tela de
+  login do sistema não aparece ali.
+- Endereços antigos salvos (Hostinger ou `jvmlab.com.br`) são convertidos automaticamente.
+- O endereço pode ser trocado em **Configurações & Backup → Portal Público de Validação**
+  (vale para os documentos emitidos depois da troca).
+
+1. **Hostinger → Domínios:** aponte `jvmlab.com.br` (e `www`) para a hospedagem do site.
+2. **Hostinger → Subdomínios:** crie `validador.jvmlab.com.br` usando a **mesma pasta** do
+   site (ou envie para ele os mesmos arquivos do build, com o `.htaccess`).
+3. Ative o **SSL** nos dois endereços (HTTPS é obrigatório para instalar o app e usar a câmera).
 4. **Supabase → Authentication → URL Configuration:** *Site URL* = `https://jvmlab.com.br`.
-5. Abra `https://jvmlab.com.br` e confira "Versão 7.0.0" no rodapé do login.
+5. O endereço antigo da Hostinger (`mediumvioletred-bison-595566.hostingersite.com`) será
+   desativado: documentos já impressos com o QR Code antigo são validados digitando o código
+   em `https://validador.jvmlab.com.br`. Reemita etiquetas ainda em uso, se preferir.
+6. Confira: `https://jvmlab.com.br` mostra o login com "Versão 7.2.0";
+   `https://validador.jvmlab.com.br` mostra só o "Portal de Validação de Autenticidade".
+
+### Página do validador no site Wix (www.jvmengenharia.com.br)
+
+1. No editor do Wix: **Páginas → Adicionar página** em branco, com o endereço (slug) **validar**.
+2. **Adicionar → Incorporar código → Incorporar um site** (elemento HTML). Em
+   "Configurações", escolha **Endereço do site** e informe `https://validador.jvmlab.com.br`.
+   Deixe-o com a largura total da página e cerca de 1000 px de altura.
+3. Ative o **Modo Dev (Velo)**, troque o ID do elemento para `validador` e cole no código da página:
+
+```js
+import wixLocationFrontend from 'wix-location-frontend';
+
+$w.onReady(function () {
+  const codigo = (wixLocationFrontend.query.codigo || '').trim();
+  const base = 'https://validador.jvmlab.com.br';
+  $w('#validador').src = codigo ? `${base}/validar/${encodeURIComponent(codigo)}` : base;
+});
+```
+
+   (Em sites antigos, use `import wixLocation from 'wix-location';` e `wixLocation.query`.)
+4. Publique o site e teste: `https://www.jvmengenharia.com.br/validar?codigo=VAL-JVM-...`.
+
+- O `.htaccess` permite que **só o validador** seja exibido dentro do site da JVM (e dos
+  domínios do Wix); o sistema continua proibido de aparecer dentro de outros sites.
+- Dentro do Wix, o botão **"Abrir em tela cheia"** abre o validador direto, caso o navegador
+  bloqueie algo dentro do quadro.
+- Se a hospedagem trocar do Apache (Hostinger) para Cloudflare/Netlify, o `_headers` não
+  diferencia domínios: o validador precisará de um site separado com `frame-ancestors` liberado.
+
+## Módulo Treinamentos — certificados de treinamento
+
+Módulo independente (`src/modules/treinamentos` + `supabase/modules/treinamentos.sql`):
+não altera ensaios, laudos nem a sincronização deles.
+
+**Instalar no banco:** depois do `schema.sql`, execute `supabase/modules/treinamentos.sql`
+no SQL Editor (não apaga dados; pode repetir). Sem isso o módulo funciona só no aparelho
+e mostra o aviso para executar o script.
+
+**Menu Treinamentos** (perfis administrador, RT, técnico e administrativo):
+- **Cursos**: já vêm NR-10 Básico (40 h), NR-10 SEP (40 h), NR-35 (8 h) e Uso de EPI/EPC
+  isolantes (4 h), com conteúdo programático, validade (24 meses) e regra de aprovação
+  (presença e nota mínimas). Tudo editável; dá para cadastrar outros cursos, duplicar e
+  recolocar os padrão. A divisão das horas por tópico é sugestão: confira com o plano de
+  curso do laboratório.
+- **Instrutores**: nome, qualificação, registro e assinatura (desenhada ou imagem);
+  podem ser importados dos usuários e técnicos.
+- **Turmas**: curso, datas, local, cliente, instrutores e alunos (digitados ou colados
+  da planilha: Nome; CPF; Função; Empresa), presença e nota. "Emitir" gera os
+  certificados de todos os aprovados de uma vez; "Lista de presença" gera o PDF com uma
+  coluna de assinatura por dia.
+- **Certificados**: emissão individual (sem turma), busca por nome/CPF/número, PDF,
+  link de validação, cancelamento com motivo (o validador mostra CANCELADO).
+- **Painel**: emitidos no ano, turmas abertas, vencendo em 60 dias e vencidos sem
+  reciclagem.
+
+**Certificado (PDF A4 paisagem):** frente com participante, CPF, curso, norma, período,
+carga horária, validade, assinaturas do instrutor, do Responsável Técnico (cadastro da
+empresa) e linha do participante, QR Code; verso com o conteúdo programático e o
+aproveitamento. Número `TRE-AAMM-0001` (turma `TUR-AAMM-0001`), com a mesma reserva de
+faixas dos ensaios (sem número repetido entre aparelhos).
+
+**Validação:** o QR Code usa o mesmo link do site Wix
+(`www.jvmengenharia.com.br/validar?codigo=VAL-TRE-...`). O validador reconhece o código
+`VAL-TRE-` e mostra os dados do certificado com o **CPF mascarado** (***.456.789-**).
+
+**Ligar/desligar:** Configurações & Backup → Módulos do sistema (por empresa; os dados
+ficam guardados).
+
+**Escolha do módulo no login:** depois de entrar, o usuário escolhe **Ensaios de EPI** ou
+**Treinamentos**. O menu mostra só os blocos do módulo escolhido, mais os comuns:
+- Ensaios de EPI: Dashboard, Clientes & OS, Ensaios de EPI, Validação de QR Code e
+  Configuração do Sistema;
+- Treinamentos: Treinamentos, Clientes, Validação de QR Code e Configuração do Sistema.
+
+O botão **Trocar** (topo do menu) volta para a escolha. Reabrindo o app com a sessão
+ativa, entra direto no último módulo usado; a cada novo login a escolha aparece de novo.
+Quem só tem um módulo disponível (ex.: perfil cliente, ou Treinamentos desligado) entra
+direto, sem a tela de escolha.
+
+**Módulos por usuário (7.2):** em Usuários & Técnicos, ao cadastrar ou editar um usuário
+com acesso, marque os **Módulos com acesso** (Ensaios de EPI, Treinamentos). A regra vale
+no banco (coluna `users.allowed_modules`, função `jvm_can_use_module`): quem não tem o
+módulo não lê nem grava aqueles dados, nem reserva numeração. Clientes são comuns a todos
+os módulos. Administradores acessam sempre todos os módulos. Todos marcados = acesso a
+todos, incluindo módulos novos. Usuários já cadastrados continuam com acesso a todos.
+A mudança vale no próximo login do usuário. Requer executar de novo `supabase/schema.sql`
+e `supabase/modules/treinamentos.sql`.
 
 ## Por que mudou
 

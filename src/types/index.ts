@@ -46,6 +46,11 @@ export interface User {
   isMasterAdmin?: boolean;
   /** Tem conta de acesso ao sistema (login). Técnicos só para assinatura não têm. */
   hasLogin?: boolean;
+  /**
+   * Módulos que o usuário pode usar (ex.: ['ensaios', 'treinamentos']).
+   * null = todos. Administradores acessam todos. Conferido também no banco.
+   */
+  allowedModules?: string[] | null;
   phone?: string;
   active?: boolean;
   avatarUrl?: string;
@@ -553,6 +558,8 @@ export interface CompanyLabInfo {
   website: string;
   instagram?: string;
   validationBaseUrl?: string; // URL pública (hospedagem do app) para validação de laudos via QR Code
+  /** Módulos da plataforma ligados/desligados para a empresa (ausente = ligado) */
+  enabledModules?: Record<string, boolean>;
   supabaseUrl?: string; // Ex: 'https://cdtbzbshylrcprvmjpgc.supabase.co'
   supabaseAnonKey?: string; // Chave pública / anon key do Supabase
   supabaseAutoSync?: boolean; // Sincronização automática em segundo plano com Supabase

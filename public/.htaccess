@@ -1,7 +1,8 @@
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteBase /
-  # Endereço oficial: https://jvmlab.com.br (o www redireciona para ele)
+  # Sistema: https://jvmlab.com.br (o www redireciona para ele).
+  # Validação (QR Code): https://validador.jvmlab.com.br, mesma pasta do site.
   RewriteCond %{HTTP_HOST} ^www\.jvmlab\.com\.br$ [NC]
   RewriteRule ^(.*)$ https://jvmlab.com.br/$1 [R=301,L]
 
@@ -33,15 +34,23 @@
   AddType application/manifest+json .webmanifest
 </IfModule>
 
+# Validador (validador.jvmlab.com.br): marcado para os cabeçalhos abaixo
+<IfModule mod_setenvif.c>
+  SetEnvIfNoCase Host "^validador\." JVM_PORTAL
+</IfModule>
+
 # Cabeçalhos de segurança (v7). A sessão de login fica no navegador: a política
 # de conteúdo (CSP) impede que scripts de fora do próprio site sejam executados.
 # Para testar uma mudança sem bloquear nada, troque "Content-Security-Policy"
 # por "Content-Security-Policy-Report-Only" e veja o console do navegador.
 <IfModule mod_headers.c>
-  Header always set Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https: http:; media-src 'self' data: blob:; connect-src 'self' https: wss: data: blob:; worker-src 'self' blob:; frame-src 'self' blob: data:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"
+  # Sistema: não pode ser exibido dentro de outros sites
+  Header always set Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https: http:; media-src 'self' data: blob:; connect-src 'self' https: wss: data: blob:; worker-src 'self' blob:; frame-src 'self' blob: data:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'" env=!JVM_PORTAL
+  # Validador: pode ser exibido dentro do site da JVM no Wix (página /validar)
+  Header always set Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https: http:; media-src 'self' data: blob:; connect-src 'self' https: wss: data: blob:; worker-src 'self' blob:; frame-src 'self' blob: data:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self' https://www.jvmengenharia.com.br https://jvmengenharia.com.br https://*.wixsite.com https://*.wix.com https://*.filesusr.com https://*.parastorage.com" env=JVM_PORTAL
   Header always set X-Content-Type-Options "nosniff"
   Header always set Referrer-Policy "strict-origin-when-cross-origin"
-  Header always set X-Frame-Options "SAMEORIGIN"
+  Header always set X-Frame-Options "SAMEORIGIN" env=!JVM_PORTAL
   Header always set Permissions-Policy "camera=(self), geolocation=(self), microphone=(), usb=(self), payment=(), interest-cohort=()"
   # HTTPS obrigatório por 1 ano (só vale se o site já abre em https)
   Header always set Strict-Transport-Security "max-age=31536000" "expr=%{HTTPS} == 'on'"
