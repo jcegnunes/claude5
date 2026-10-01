@@ -305,6 +305,8 @@ CREATE TABLE IF NOT EXISTS public.training_signing_certs (
   last_used_at TIMESTAMPTZ,
   last_used_by UUID
 );
+-- Dados do certificado ligados à assinatura (titular, ND, emissor, cadeia, política, usos...)
+ALTER TABLE public.training_signing_certs ADD COLUMN IF NOT EXISTS details JSONB;
 ALTER TABLE public.training_signing_certs ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.training_signing_certs FROM PUBLIC, anon, authenticated;
 
@@ -318,10 +320,12 @@ $$;
 REVOKE ALL ON FUNCTION public.jvm_training_signing_key() FROM PUBLIC, anon, authenticated;
 
 -- Cadastrar/trocar: administrador ou Responsável Técnico da empresa
+-- (versão anterior, sem os dados do certificado, é substituída)
+DROP FUNCTION IF EXISTS public.jvm_training_save_signing_cert(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TIMESTAMPTZ, TIMESTAMPTZ);
 CREATE OR REPLACE FUNCTION public.jvm_training_save_signing_cert(
   p_owner_type TEXT, p_owner_id TEXT, p_pfx_base64 TEXT, p_password TEXT,
   p_holder_name TEXT, p_holder_doc TEXT, p_issuer TEXT, p_serial TEXT,
-  p_valid_from TIMESTAMPTZ, p_valid_to TIMESTAMPTZ
+  p_valid_from TIMESTAMPTZ, p_valid_to TIMESTAMPTZ, p_details JSONB DEFAULT NULL
 )
 RETURNS JSON
 LANGUAGE plpgsql
@@ -350,15 +354,18 @@ BEGIN
   IF COALESCE(p_password, '') = '' THEN
     RAISE EXCEPTION 'Informe a senha do certificado.' USING ERRCODE = '22023';
   END IF;
+  IF p_details IS NOT NULL AND (jsonb_typeof(p_details) <> 'object' OR length(p_details::text) > 20000) THEN
+    RAISE EXCEPTION 'Dados do certificado inválidos.' USING ERRCODE = '22023';
+  END IF;
 
   INSERT INTO public.training_signing_certs AS t (id, company_id, owner_type, owner_id, holder_name, holder_doc, issuer, serial,
-                                                   valid_from, valid_to, pfx_enc, password_enc, updated_at, updated_by)
+                                                   valid_from, valid_to, details, pfx_enc, password_enc, updated_at, updated_by)
   VALUES (v_company || ':' || p_owner_type || ':' || v_owner, v_company, p_owner_type, v_owner, p_holder_name, p_holder_doc, p_issuer,
-          p_serial, p_valid_from, p_valid_to, extensions.pgp_sym_encrypt(p_pfx_base64, v_key),
+          p_serial, p_valid_from, p_valid_to, p_details, extensions.pgp_sym_encrypt(p_pfx_base64, v_key),
           extensions.pgp_sym_encrypt(p_password, v_key), NOW(), auth.uid())
   ON CONFLICT (id) DO UPDATE SET
     holder_name = EXCLUDED.holder_name, holder_doc = EXCLUDED.holder_doc, issuer = EXCLUDED.issuer, serial = EXCLUDED.serial,
-    valid_from = EXCLUDED.valid_from, valid_to = EXCLUDED.valid_to, pfx_enc = EXCLUDED.pfx_enc,
+    valid_from = EXCLUDED.valid_from, valid_to = EXCLUDED.valid_to, details = EXCLUDED.details, pfx_enc = EXCLUDED.pfx_enc,
     password_enc = EXCLUDED.password_enc, updated_at = NOW(), updated_by = auth.uid();
   RETURN json_build_object('ok', true);
 END;
@@ -400,7 +407,7 @@ BEGIN
     SELECT json_agg(json_build_object(
       'ownerType', owner_type, 'ownerId', owner_id, 'holderName', holder_name, 'holderDoc', holder_doc,
       'issuer', issuer, 'serial', serial, 'validFrom', valid_from, 'validTo', valid_to,
-      'updatedAt', updated_at, 'lastUsedAt', last_used_at) ORDER BY owner_type, holder_name)
+      'updatedAt', updated_at, 'lastUsedAt', last_used_at, 'details', details) ORDER BY owner_type, holder_name)
       FROM public.training_signing_certs WHERE company_id = v_company), '[]'::json);
 END;
 $$;
@@ -434,11 +441,11 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.jvm_training_save_signing_cert(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TIMESTAMPTZ, TIMESTAMPTZ) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.jvm_training_save_signing_cert(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TIMESTAMPTZ, TIMESTAMPTZ, JSONB) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.jvm_training_delete_signing_cert(TEXT, TEXT) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.jvm_training_signing_certs() FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.jvm_training_signing_material(TEXT, TEXT) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.jvm_training_save_signing_cert(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TIMESTAMPTZ, TIMESTAMPTZ) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.jvm_training_save_signing_cert(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TIMESTAMPTZ, TIMESTAMPTZ, JSONB) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.jvm_training_delete_signing_cert(TEXT, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.jvm_training_signing_certs() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.jvm_training_signing_material(TEXT, TEXT) TO authenticated;

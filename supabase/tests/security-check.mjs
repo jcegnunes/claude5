@@ -276,7 +276,7 @@ async function main() {
 
   // ------------------------------------------ certificado digital (A1)
   await db.exec(`INSERT INTO public.training_instructors (id, company_id, name) VALUES ('ins-dig', 'comp-2', 'Instrutor Digital')`);
-  const saveSql = `SELECT public.jvm_training_save_signing_cert('instructor', 'ins-dig', 'UEZYLUJBU0U2NA==', 'SenhaPFX123', 'INSTRUTOR DIGITAL', '22222222222', 'AC TESTE', '01', now(), now() + interval '1 year') AS v`;
+  const saveSql = `SELECT public.jvm_training_save_signing_cert('instructor', 'ins-dig', 'UEZYLUJBU0U2NA==', 'SenhaPFX123', 'INSTRUTOR DIGITAL', '22222222222', 'AC TESTE', '01', now(), now() + interval '1 year', '{"kind":"e-CPF","level":"A1","cpf":"222.222.222-22","chain":["AC TESTE","AC RAIZ"]}'::jsonb) AS v`;
   r = await as(db, user(b), saveSql);
   ok(!!r.error, 'técnico NÃO cadastra certificado digital');
   await db.exec(`UPDATE public.users SET role = 'responsavel_tecnico' WHERE id = 'usr-b'`);
@@ -296,6 +296,9 @@ async function main() {
   const list = typeof r.rows?.[0]?.v === 'string' ? JSON.parse(r.rows[0].v) : r.rows?.[0]?.v;
   ok(Array.isArray(list) && list.length === 1 && list[0].holderName === 'INSTRUTOR DIGITAL' && !JSON.stringify(list).includes('SenhaPFX123') && !('pfx' in list[0]),
     'lista mostra titular e validade, sem arquivo nem senha');
+  ok(list?.[0]?.details?.level === 'A1' && list?.[0]?.details?.chain?.length === 2, 'lista devolve os dados do certificado (tipo, nível, cadeia)');
+  r = await as(db, user(b), `SELECT public.jvm_training_save_signing_cert('instructor', 'ins-dig', 'QQ==', 'x', 'X', '', '', '', now(), now(), '"texto"'::jsonb) AS v`);
+  ok(!!r.error, 'dados do certificado em formato inválido são recusados');
   await db.exec(`UPDATE public.users SET role = 'tecnico' WHERE id = 'usr-b'`);
   r = await as(db, user(b), `SELECT public.jvm_training_signing_material('instructor', 'ins-dig') AS v`);
   const mat = typeof r.rows?.[0]?.v === 'string' ? JSON.parse(r.rows[0].v) : r.rows?.[0]?.v;

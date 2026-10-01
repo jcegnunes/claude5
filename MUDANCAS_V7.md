@@ -132,8 +132,15 @@ faixas dos ensaios (sem número repetido entre aparelhos).
 **Certificado digital ICP-Brasil (A1) — assinatura digital dos PDFs:**
 - Em Treinamentos → Instrutores: no cadastro de cada instrutor (quadro "Certificado
   digital") e no cartão do **Responsável Técnico**, envie o arquivo `.pfx`/`.p12` e a senha.
-  O sistema confere a senha, mostra titular, CPF, emissor e validade, e recusa certificado
-  vencido. Só administrador ou RT cadastram/trocam/removem (exige internet).
+  Ao informar arquivo e senha, o sistema lê e mostra (antes de salvar) todos os dados do
+  certificado ligados à assinatura: titular (CN), tipo (e-CPF/e-CNPJ, A1, ICP-Brasil), CPF ou
+  CNPJ, responsável (e-CNPJ) e e-mail, ND do titular e do emissor, cadeia até a AC Raiz,
+  número de série, validade, política ICP-Brasil (OID), usos da chave, algoritmo, tamanho da
+  chave e impressão digital SHA-256. Esses dados ficam gravados (coluna `details`) e podem
+  ser vistos em "Ver todos os dados do certificado". Dados pessoais sem relação com a
+  assinatura (nascimento, RG, NIS, título de eleitor) não são lidos. Certificado vencido ou
+  senha errada são recusados. Só administrador ou RT cadastram/trocam/removem (exige internet).
+  Certificados cadastrados antes desta versão: envie o arquivo de novo para gravar os dados.
 - O arquivo e a senha ficam **criptografados no banco** (tabela `training_signing_certs`,
   chave em `jvm_private_secrets`), que o app não lê diretamente. Funções do banco entregam o
   material só para quem emite certificados de treinamento na própria empresa, e registram o
@@ -142,7 +149,8 @@ faixas dos ensaios (sem número repetido entre aparelhos).
 - Ao baixar certificados (com internet), cada PDF é assinado digitalmente pelo RT e pelos
   instrutores que têm certificado (uma assinatura por pessoa, sem invalidar a anterior).
   Vários certificados saem num `.zip` com um PDF assinado por aluno. O certificado impresso
-  traz "Assinado digitalmente · ICP-Brasil" sob o nome de quem assinou. Confira no Adobe
+  traz, acima do nome de quem assinou, o carimbo da assinatura digital com os dados lidos do
+  certificado (nome do titular, ND, razão, localização e data), no padrão dos leitores de PDF. Confira no Adobe
   Reader ou em https://validar.iti.gov.br. Sem internet ou com certificado vencido, o PDF
   sai sem assinatura digital (com aviso).
 - Limitação: a assinatura é PAdES básica (PKCS#7 destacada, SHA-256). Ela é válida e

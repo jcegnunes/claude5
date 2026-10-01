@@ -89,8 +89,99 @@ function drawHeader(doc: jsPDF, company: CompanyLabInfo, assets: Assets, w: numb
   lines.forEach((l, i) => doc.text(l, w - 16, 25 + i * 4, { align: 'right' }));
 }
 
-function drawSignature(doc: jsPDF, x: number, y: number, width: number, image: string, name: string, line2: string, line3?: string, digital = false) {
-  if (image) {
+export interface DigitalStamp { cn: string; dn: string; reason: string; location: string; at: Date }
+
+/** Data no formato dos leitores de PDF: 2026.10.01 19:05:31-03'00' */
+function stampDate(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  const m = -d.getTimezoneOffset();
+  const a = Math.abs(m);
+  return `${d.getFullYear()}.${p(d.getMonth() + 1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+    + `${m >= 0 ? '+' : '-'}${p(Math.floor(a / 60))}'${p(a % 60)}'`;
+}
+
+/**
+ * Aparência visível da assinatura digital (padrão dos leitores de PDF):
+ * à esquerda o nome do titular em destaque; à direita os dados do certificado.
+ */
+function drawDigitalStamp(doc: jsPDF, cx: number, lineY: number, width: number, s: DigitalStamp) {
+  const boxW = Math.min(width - 2, 76);
+  const boxH = 22;
+  const x0 = cx - boxW / 2;
+  const y0 = lineY - boxH - 0.8;
+  const leftW = boxW * 0.42;
+  const rightX = x0 + leftW + 1.5;
+  const rightW = boxW - leftW - 1.5;
+  const mm = (pt: number) => pt * 0.3528;
+
+  // marca d'água: selo com visto
+  doc.setDrawColor(214, 236, 226);
+  doc.setLineWidth(1.2);
+  doc.circle(x0 + leftW / 2, y0 + boxH / 2, 8, 'S');
+  doc.setLineWidth(1.6);
+  doc.line(x0 + leftW / 2 - 4, y0 + boxH / 2, x0 + leftW / 2 - 1, y0 + boxH / 2 + 3);
+  doc.line(x0 + leftW / 2 - 1, y0 + boxH / 2 + 3, x0 + leftW / 2 + 4.5, y0 + boxH / 2 - 3.5);
+
+  // nome do titular, no maior tamanho que couber
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(20, 20, 20);
+  // quebra só nos espaços e depois do ":" (nome:CPF/CNPJ); a fonte diminui até caber
+  const words = s.cn.replace(/:/g, ': ').split(/\s+/).filter(Boolean).map(w => w.replace(/:$/, ':'));
+  const wrap = (maxW: number): string[] => {
+    const out: string[] = [];
+    let cur = '';
+    words.forEach(w => {
+      const glue = cur && !cur.endsWith(':') ? ' ' : '';
+      const next = cur ? cur + glue + w : w;
+      if (cur && doc.getTextWidth(next) > maxW) { out.push(cur); cur = w; } else cur = next;
+    });
+    if (cur) out.push(cur);
+    return out;
+  };
+  let size = 12;
+  let lines: string[] = [];
+  for (; size >= 5; size -= 0.5) {
+    doc.setFontSize(size);
+    lines = wrap(leftW - 1);
+    const widest = Math.max(...lines.map(l => doc.getTextWidth(l)));
+    if (widest <= leftW - 1 && lines.length * mm(size) * 1.1 <= boxH - 1) break;
+  }
+  if (size < 5) { size = 5; doc.setFontSize(size); lines = doc.splitTextToSize(s.cn, leftW - 1); }
+  const lh = mm(size) * 1.1;
+  let ly = y0 + (boxH - lines.length * lh) / 2 + mm(size) * 0.82;
+  lines.slice(0, Math.floor((boxH - 1) / lh)).forEach(l => { doc.text(l, x0 + leftW / 2, ly, { align: 'center' }); ly += lh; });
+
+  // dados do certificado
+  const paragraphs = [
+    `Assinado digitalmente por ${s.cn}`,
+    s.dn ? `ND: ${s.dn}` : '',
+    `Razão: ${s.reason}`,
+    `Localização: ${s.location}`,
+    `Data: ${stampDate(s.at)}`
+  ].filter(Boolean);
+  let fs2 = 5;
+  let all: string[] = [];
+  for (; fs2 >= 3.8; fs2 -= 0.2) {
+    doc.setFontSize(fs2);
+    all = paragraphs.flatMap(p => doc.splitTextToSize(p, rightW));
+    if (all.length * mm(fs2) * 1.12 <= boxH) break;
+  }
+  const rlh = mm(fs2) * 1.12;
+  const maxLines = Math.floor(boxH / rlh);
+  if (all.length > maxLines) {
+    // ND muito longo: corta o ND e mantém razão, local e data
+    const tail = paragraphs.slice(-3).flatMap(p => doc.splitTextToSize(p, rightW));
+    all = [...all.slice(0, maxLines - tail.length - 1), '…', ...tail];
+  }
+  doc.setTextColor(30, 30, 30);
+  let ry = y0 + mm(fs2) * 0.9;
+  all.forEach(l => { doc.text(l, rightX, ry); ry += rlh; });
+}
+
+function drawSignature(doc: jsPDF, x: number, y: number, width: number, image: string, name: string, line2: string, line3?: string, stamp?: DigitalStamp) {
+  if (stamp) {
+    drawDigitalStamp(doc, x + width / 2, y, width, stamp);
+  } else if (image) {
     try { doc.addImage(image, imageFormat(image), x + width / 2 - 22, y - 15, 44, 14, undefined, 'FAST'); } catch { /* assinatura inválida */ }
   }
   doc.setDrawColor(...GRAY);
@@ -105,15 +196,14 @@ function drawSignature(doc: jsPDF, x: number, y: number, width: number, image: s
   doc.setTextColor(...GRAY);
   if (line2) doc.text(doc.splitTextToSize(line2, width - 4)[0], x + width / 2, y + 7.6, { align: 'center' });
   if (line3) doc.text(doc.splitTextToSize(line3, width - 4)[0], x + width / 2, y + 10.8, { align: 'center' });
-  if (digital) {
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(6.6);
-    doc.setTextColor(5, 120, 85);
-    doc.text('Assinado digitalmente · ICP-Brasil', x + width / 2, y + (line3 ? 14 : 10.8), { align: 'center' });
-  }
 }
 
-async function drawCertificate(doc: jsPDF, cert: TrainingCertificate, company: CompanyLabInfo, assets: Assets, digitalNames: string[] = []) {
+async function drawCertificate(
+  doc: jsPDF, cert: TrainingCertificate, company: CompanyLabInfo, assets: Assets,
+  stamps: Record<string, { cn: string; dn: string; reason: string }> = {}, signedAt: Date = new Date()
+) {
+  const stampLocation = [company.city, company.state].filter(Boolean).join('/') || cityOf(company) || 'Brasil';
+  const digitalNames = Object.keys(stamps);
   const w = doc.internal.pageSize.getWidth();
   const h = doc.internal.pageSize.getHeight();
   drawFrame(doc, w, h);
@@ -184,7 +274,8 @@ async function drawCertificate(doc: jsPDF, cert: TrainingCertificate, company: C
   const areaX = 18;
   const areaW = w - 18 - 60; // à direita fica o QR Code
   const colW = areaW / signers.length;
-  signers.forEach((s, i) => drawSignature(doc, areaX + i * colW, sigY, colW, s.image, s.name, s.l2, s.l3, digitalNames.includes(s.name)));
+  signers.forEach((s, i) => drawSignature(doc, areaX + i * colW, sigY, colW, s.image, s.name, s.l2, s.l3,
+    stamps[s.name] ? { ...stamps[s.name], location: stampLocation, at: signedAt } : undefined));
 
   // ------------------------------------------------------- QR Code e número
   const url = buildValidationUrl(company.validationBaseUrl, cert.validationCode);
@@ -329,10 +420,12 @@ export async function exportTrainingCertificates(certs: TrainingCertificate[], f
   const warnings = new Set<string>();
   let signedCount = 0;
   for (const cert of certs) {
-    const plan = cert.status === 'cancelado' ? { signers: [], names: [], warnings: [] } : await signing.planSignatures(cert);
+    const plan = cert.status === 'cancelado' ? { signers: [], names: [], stamps: {}, warnings: [] } : await signing.planSignatures(cert);
     plan.warnings.forEach(w => warnings.add(w));
     const doc = newCertificateDoc();
-    await drawCertificate(doc, cert, company, assets, plan.names);
+    const location = [company.city, company.state].filter(Boolean).join('/') || 'Brasil';
+    plan.signers.forEach(sg => { sg.location = location; });
+    await drawCertificate(doc, cert, company, assets, plan.stamps, new Date());
     let bytes: Uint8Array = new Uint8Array(doc.output('arraybuffer'));
     if (plan.signers.length) {
       try {

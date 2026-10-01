@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { GraduationCap, Plus, Pencil, Trash2, UserPlus } from 'lucide-react';
+import { GraduationCap, Plus, Pencil, Trash2, UserPlus, Loader2 } from 'lucide-react';
 import { SignatureCanvas } from '../../../components/SignatureCanvas';
 import { DielectricStorageService } from '../../../services/syncEngine';
 import {
@@ -8,7 +8,10 @@ import {
 import { newId } from '../rules';
 import type { TrainingInstructor } from '../types';
 import { btnPrimary, btnSecondary, cardCls, EmptyState, Field, inputCls, Modal } from './ui';
-import { DigitalCertBadge, DigitalCertBox, useSigningCerts } from './DigitalCertBox';
+import { DigitalCertBadge, DigitalCertBox, PendingCertFields, useSigningCerts, type PendingCert } from './DigitalCertBox';
+import { inspectP12, isCertExpired } from '../digitalSignature';
+import { saveSigningCert } from '../signingCerts';
+import { syncTraining } from '../sync';
 
 const emptyInstructor = (): TrainingInstructor => ({
   id: '', companyId: '', createdAt: '', updatedAt: '',
@@ -98,10 +101,35 @@ export const InstructorsPanel: React.FC = () => {
 const InstructorEditor: React.FC<{ instructor: TrainingInstructor; onClose: () => void }> = ({ instructor, onClose }) => {
   const [i, setI] = useState<TrainingInstructor>(instructor);
   const set = <K extends keyof TrainingInstructor>(k: K, v: TrainingInstructor[K]) => setI(prev => ({ ...prev, [k]: v }));
+  const [pending, setPending] = useState<PendingCert>({ file: null, password: '' });
+  const [certError, setCertError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!i.name.trim()) return window.alert('Informe o nome do instrutor.');
-    saveInstructor({ ...i, id: i.id || newId('ins'), name: i.name.trim() });
+    // certificado escolhido no cadastro do instrutor novo: confere antes de salvar
+    if (pending.file) {
+      if (!pending.password) return setCertError('Informe a senha do certificado.');
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) return setCertError('Cadastrar certificado digital exige internet. Salve sem o certificado e cadastre depois.');
+      try {
+        const info = inspectP12(new Uint8Array(await pending.file.arrayBuffer()), pending.password);
+        if (isCertExpired(info)) return setCertError(`Este certificado venceu em ${new Date(info.validTo).toLocaleDateString('pt-BR')}.`);
+      } catch (err) {
+        return setCertError(err instanceof Error ? err.message : String(err));
+      }
+    }
+    const saved = saveInstructor({ ...i, id: i.id || newId('ins'), name: i.name.trim() });
+    if (pending.file) {
+      setSaving(true);
+      try {
+        await syncTraining();
+        await saveSigningCert('instructor', saved.id, pending.file, pending.password);
+      } catch (err) {
+        window.alert(`Instrutor salvo, mas o certificado digital não foi cadastrado: ${err instanceof Error ? err.message : String(err)}\nAbra o instrutor e tente de novo no quadro "Certificado digital".`);
+      } finally {
+        setSaving(false);
+      }
+    }
     onClose();
   };
 
@@ -111,7 +139,9 @@ const InstructorEditor: React.FC<{ instructor: TrainingInstructor; onClose: () =
       onClose={onClose}
       footer={<>
         <button type="button" className={btnSecondary} onClick={onClose}>Cancelar</button>
-        <button type="button" className={btnPrimary} onClick={handleSave}>Salvar instrutor</button>
+        <button type="button" className={btnPrimary} disabled={saving} onClick={handleSave}>
+          {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />} {saving ? 'Salvando certificado…' : 'Salvar instrutor'}
+        </button>
       </>}
     >
       <div className="grid gap-3 sm:grid-cols-2">
@@ -136,7 +166,7 @@ const InstructorEditor: React.FC<{ instructor: TrainingInstructor; onClose: () =
       <div className="mt-4">
         {instructor.id
           ? <DigitalCertBox ownerType="instructor" ownerId={instructor.id} ownerName={i.name} />
-          : <p className="text-[11px] text-slate-500">Salve o instrutor para cadastrar o certificado digital (A1).</p>}
+          : <PendingCertFields value={pending} onChange={v => { setPending(v); setCertError(null); }} error={certError} />}
       </div>
     </Modal>
   );

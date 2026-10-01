@@ -6,7 +6,7 @@
  */
 import { SupabaseService } from '../../services/supabaseService';
 import { currentCompanyId, currentUser, getInstructors } from './repository';
-import { base64ToBytes, bytesToBase64, inspectP12, isCertExpired, type PdfSigner } from './digitalSignature';
+import { base64ToBytes, bytesToBase64, inspectP12, isCertExpired, type CertDetails, type PdfSigner } from './digitalSignature';
 import type { TrainingCertificate } from './types';
 
 export type SigningOwnerType = 'instructor' | 'rt';
@@ -22,6 +22,8 @@ export interface SigningCertSummary {
   validTo: string;
   updatedAt?: string;
   lastUsedAt?: string;
+  /** Dados do certificado ligados à assinatura (lidos no cadastro) */
+  details?: CertDetails | null;
 }
 
 const LIST_KEY = 'jvm_training_signing_list';
@@ -109,7 +111,8 @@ export async function saveSigningCert(type: SigningOwnerType, ownerId: string, f
     p_issuer: info.issuer,
     p_serial: info.serial,
     p_valid_from: info.validFrom,
-    p_valid_to: info.validTo
+    p_valid_to: info.validTo,
+    p_details: info.details
   });
   if (error) throw rpcError(error);
   material.delete(keyOf(type, ownerId));
@@ -140,13 +143,15 @@ export interface SignaturePlan {
   signers: PdfSigner[];
   /** Nomes impressos com "Assinado digitalmente" */
   names: string[];
+  /** Carimbo visível acima do nome de cada assinante (dados lidos do certificado) */
+  stamps: Record<string, { cn: string; dn: string; reason: string }>;
   /** Avisos (certificado vencido, sem internet...) */
   warnings: string[];
 }
 
 /** Quem assina este certificado: Responsável Técnico e instrutores com certificado digital. */
 export async function planSignatures(cert: TrainingCertificate): Promise<SignaturePlan> {
-  const plan: SignaturePlan = { signers: [], names: [], warnings: [] };
+  const plan: SignaturePlan = { signers: [], names: [], stamps: {}, warnings: [] };
   const wanted: Array<{ type: SigningOwnerType; id: string; label: string }> = [];
   if (cert.technicalResponsibleName && findSigningCert('rt', 'rt')) wanted.push({ type: 'rt', id: 'rt', label: cert.technicalResponsibleName });
   const instructors = getInstructors();
@@ -165,13 +170,17 @@ export async function planSignatures(cert: TrainingCertificate): Promise<Signatu
       plan.warnings.push(`Certificado digital de ${w.label} vencido: não assinado.`);
       continue;
     }
-    plan.signers.push({
-      p12: m.p12,
-      password: m.password,
-      name: m.holderName || w.label,
-      reason: w.type === 'rt' ? 'Responsável Técnico – certificado de treinamento' : 'Instrutor – certificado de treinamento'
-    });
+    const reason = w.type === 'rt' ? 'Responsável Técnico – certificado de treinamento' : 'Instrutor – certificado de treinamento';
+    let cn = m.holderName || w.label;
+    let dn = '';
+    try {
+      const info = inspectP12(m.p12, m.password);
+      cn = info.commonName || cn;
+      dn = info.subjectDn;
+    } catch { /* usa o nome cadastrado */ }
+    plan.signers.push({ p12: m.p12, password: m.password, name: cn, reason });
     plan.names.push(w.label);
+    plan.stamps[w.label] = { cn, dn, reason };
   }
   return plan;
 }

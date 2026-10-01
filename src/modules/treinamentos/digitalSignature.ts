@@ -8,12 +8,151 @@ import forge from 'node-forge';
 
 export interface SigningCertInfo {
   holderName: string;
+  /** Nome comum completo do certificado (ex.: "JVM ENGENHARIA LTDA:29894500000104") */
+  commonName: string;
+  /** Nome distinto (ND) do titular: "C=BR, S=DF, L=BRASILIA, O=ICP-Brasil, OU=..., CN=..." */
+  subjectDn: string;
   /** CPF/CNPJ do titular, quando presente no certificado ICP-Brasil */
   holderDoc: string;
   issuer: string;
   serial: string;
   validFrom: string;
   validTo: string;
+  /** Todos os dados do certificado ligados à assinatura */
+  details: CertDetails;
+}
+
+/**
+ * Dados do certificado ligados à assinatura. Dados pessoais do titular que
+ * não interessam à assinatura (nascimento, RG, NIS, título) não são lidos.
+ */
+export interface CertDetails {
+  commonName: string;
+  subjectDn: string;
+  /** e-CPF, e-CNPJ ou outro */
+  kind: string;
+  /** A1, A3... (pela política ICP-Brasil) */
+  level: string;
+  icpBrasil: boolean;
+  cpf?: string;
+  cnpj?: string;
+  /** e-CNPJ: responsável pelo certificado */
+  responsibleName?: string;
+  responsibleCpf?: string;
+  email?: string;
+  issuerCn: string;
+  issuerDn: string;
+  /** Cadeia de ACs presente no arquivo (do emissor até a raiz) */
+  chain: string[];
+  serial: string;
+  validFrom: string;
+  validTo: string;
+  policies: string[];
+  keyUsage: string[];
+  extKeyUsage: string[];
+  signatureAlgorithm: string;
+  keyBits: number;
+  sha256: string;
+}
+
+const DN_SHORT: Record<string, string> = { ST: 'S' };
+const dnOf = (name: forge.pki.Certificate['subject']) => name.attributes
+  .map(a => `${DN_SHORT[a.shortName || ''] || a.shortName || a.name || a.type}=${a.value}`)
+  .join(', ');
+
+const KEY_USAGE: Record<string, string> = {
+  digitalSignature: 'Assinatura digital', nonRepudiation: 'Não repúdio', keyEncipherment: 'Cifragem de chave',
+  dataEncipherment: 'Cifragem de dados', keyAgreement: 'Acordo de chave', keyCertSign: 'Assinatura de certificado', cRLSign: 'Assinatura de LCR'
+};
+const EXT_KEY_USAGE: Record<string, string> = {
+  clientAuth: 'Autenticação de cliente', emailProtection: 'Proteção de e-mail', codeSigning: 'Assinatura de código',
+  serverAuth: 'Autenticação de servidor', timeStamping: 'Carimbo do tempo'
+};
+const ICP_LEVEL: Record<string, string> = { '1': 'A1', '2': 'A2', '3': 'A3', '4': 'A4' };
+const formatCpf = (d: string) => (d.length === 11 ? `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}` : d);
+const formatCnpj = (d: string) => (d.length === 14 ? `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}` : d);
+const digitsOnly = (v: string) => v.replace(/\D/g, '');
+
+/** Lê os campos do certificado (incluindo os campos ICP-Brasil do SubjectAltName). */
+export function certificateDetails(own: forge.pki.Certificate, chainCerts: forge.pki.Certificate[] = []): CertDetails {
+  const A = forge.asn1;
+  const cn = String(own.subject.getField('CN')?.value || '');
+  const details: CertDetails = {
+    commonName: cn,
+    subjectDn: dnOf(own.subject),
+    kind: 'Certificado digital',
+    level: '',
+    icpBrasil: /ICP-Brasil/i.test(dnOf(own.subject) + dnOf(own.issuer)),
+    issuerCn: String(own.issuer.getField('CN')?.value || ''),
+    issuerDn: dnOf(own.issuer),
+    chain: [],
+    serial: own.serialNumber,
+    validFrom: own.validity.notBefore.toISOString(),
+    validTo: own.validity.notAfter.toISOString(),
+    policies: [],
+    keyUsage: [],
+    extKeyUsage: [],
+    signatureAlgorithm: (forge.pki.oids as Record<string, string>)[own.signatureOid || ''] || own.signatureOid || '',
+    keyBits: (own.publicKey as forge.pki.rsa.PublicKey)?.n?.bitLength?.() || 0,
+    sha256: ''
+  };
+  try {
+    const md = forge.md.sha256.create();
+    md.update(A.toDer(forge.pki.certificateToAsn1(own)).getBytes());
+    details.sha256 = md.digest().toHex().toUpperCase().match(/.{2}/g)!.join(':');
+  } catch { /* sem impressão digital */ }
+
+  for (const ext of (own.extensions || []) as any[]) {
+    try {
+      if (ext.id === '2.5.29.17' && typeof ext.value === 'string') {
+        // SubjectAltName: campos ICP-Brasil (otherName) e e-mail
+        for (const gn of A.fromDer(ext.value).value as forge.asn1.Asn1[]) {
+          if (gn.tagClass !== A.Class.CONTEXT_SPECIFIC) continue;
+          if (gn.type === 1 && typeof gn.value === 'string') details.email = gn.value;
+          if (gn.type !== 0 || !Array.isArray(gn.value)) continue;
+          const oid = A.derToOid((gn.value[0] as forge.asn1.Asn1).value as string);
+          const wrapped = (gn.value[1] as forge.asn1.Asn1)?.value as forge.asn1.Asn1[];
+          const raw = String((wrapped && wrapped[0] && wrapped[0].value) || '');
+          if (oid === '2.16.76.1.3.1') details.cpf = digitsOnly(raw.slice(8, 19));            // e-CPF: titular
+          if (oid === '2.16.76.1.3.4') details.responsibleCpf = digitsOnly(raw.slice(8, 19)); // e-CNPJ: responsável
+          if (oid === '2.16.76.1.3.2') details.responsibleName = raw.trim();
+          if (oid === '2.16.76.1.3.3') details.cnpj = digitsOnly(raw);
+        }
+      } else if (ext.id === '2.5.29.32' && typeof ext.value === 'string') {
+        for (const pi of A.fromDer(ext.value).value as forge.asn1.Asn1[]) {
+          const oid = A.derToOid(((pi.value as forge.asn1.Asn1[])[0]).value as string);
+          details.policies.push(oid);
+          const m = oid.match(/^2\.16\.76\.1\.2\.(\d)\./);
+          if (m) { details.level = ICP_LEVEL[m[1]] || details.level; details.icpBrasil = true; }
+        }
+      } else if (ext.name === 'keyUsage') {
+        details.keyUsage = Object.keys(KEY_USAGE).filter(k => ext[k]).map(k => KEY_USAGE[k]);
+      } else if (ext.name === 'extKeyUsage') {
+        details.extKeyUsage = Object.keys(EXT_KEY_USAGE).filter(k => ext[k]).map(k => EXT_KEY_USAGE[k]);
+      }
+    } catch { /* extensão em formato inesperado: ignorada */ }
+  }
+
+  // CPF/CNPJ também vêm no CN ("NOME:documento")
+  const docInCn = digitsOnly(cn.split(':')[1] || '');
+  if (!details.cnpj && docInCn.length === 14) details.cnpj = docInCn;
+  if (!details.cpf && !details.cnpj && docInCn.length === 11) details.cpf = docInCn;
+  details.kind = details.cnpj ? 'e-CNPJ' : details.cpf ? 'e-CPF' : 'Certificado digital';
+  if (details.cpf) details.cpf = formatCpf(details.cpf);
+  if (details.cnpj) details.cnpj = formatCnpj(details.cnpj);
+  if (details.responsibleCpf) details.responsibleCpf = formatCpf(details.responsibleCpf);
+
+  // cadeia: do emissor do titular até a raiz, com os certificados de AC do arquivo
+  let current = own;
+  for (let i = 0; i < 6; i++) {
+    const parent = chainCerts.find(c => c !== current && dnOf(c.subject) === dnOf(current.issuer));
+    if (!parent) break;
+    details.chain.push(String(parent.subject.getField('CN')?.value || dnOf(parent.subject)));
+    if (dnOf(parent.subject) === dnOf(parent.issuer)) break;
+    current = parent;
+  }
+  if (!details.chain.length && details.issuerCn) details.chain.push(details.issuerCn);
+  return details;
 }
 
 export interface PdfSigner {
@@ -22,6 +161,7 @@ export interface PdfSigner {
   password: string;
   name: string;
   reason: string;
+  location?: string;
 }
 
 function bytesToBinary(bytes: Uint8Array): string {
@@ -57,13 +197,18 @@ export function inspectP12(bytes: Uint8Array, password: string): SigningCertInfo
   const cn = String(own.subject.getField('CN')?.value || '');
   const [namePart, docPart] = cn.split(':');
   const issuer = String(own.issuer.getField('CN')?.value || own.issuer.getField('O')?.value || '');
+  const subjectDn = dnOf(own.subject);
+  const details = certificateDetails(own, certs);
   return {
     holderName: (namePart || cn).trim(),
-    holderDoc: (docPart || '').replace(/\D/g, ''),
+    commonName: cn,
+    subjectDn,
+    holderDoc: (docPart || '').replace(/\D/g, '') || digitsOnly(details.cnpj || details.cpf || ''),
     issuer,
     serial: own.serialNumber,
     validFrom: own.validity.notBefore.toISOString(),
-    validTo: own.validity.notAfter.toISOString()
+    validTo: own.validity.notAfter.toISOString(),
+    details
   };
 }
 
@@ -90,7 +235,7 @@ export async function signPdf(pdf: Uint8Array, signers: PdfSigner[]): Promise<Ui
       reason: s.reason,
       contactInfo: '',
       name: s.name,
-      location: 'Brasil',
+      location: s.location || 'Brasil',
       signatureLength: 20000
     });
     const signer = new P12Signer(Buffer.from(s.p12), { passphrase: s.password });
