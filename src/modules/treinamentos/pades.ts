@@ -157,6 +157,8 @@ export interface SignatureCheck {
   chainTrusted: boolean;
   chain: string[];
   certValidAtSigning: boolean;
+  /** O arquivo foi regravado por outro programa depois de assinado */
+  rewritten?: boolean;
   status: CheckStatus;
   messages: string[];
 }
@@ -226,6 +228,8 @@ export function verifyPdfSignatures(pdf: Uint8Array): PdfSignatureReport {
     index++;
     const [a, b, c, d] = m.slice(1).map(Number);
     const messages: string[] = [];
+    // ByteRange que não bate com o arquivo: ele foi regravado por outro programa depois de assinado
+    const rewritten = c + d > pdf.length || text[a + b] !== '<' || text[c - 1] !== '>';
     const check: SignatureCheck = {
       index, signerCn: '', signerDn: '', issuerCn: '', subFilter: '', coversWholeDocument: c + d === pdf.length,
       integrity: false, cryptoValid: false, signingCertOk: null, chainTrusted: false, chain: [], certValidAtSigning: false,
@@ -241,8 +245,12 @@ export function verifyPdfSignatures(pdf: Uint8Array): PdfSignatureReport {
       const when = parsePdfDate((dict.match(/\/M\s*\((D:[^)]+)\)/g)?.pop() || '').replace(/^\/M\s*\(/, ''));
       check.signingTime = when?.toISOString();
 
-      const hex = text.slice(a + b + 1, c - 1).replace(/(?:00)+$/, '');
-      const cms = A.fromDer(hexToBytes(hex.length % 2 ? hex + '0' : hex));
+      if (rewritten) {
+        throw new Error('o arquivo foi regravado por outro programa (leitor/editor de PDF) depois de assinado, e a assinatura não corresponde mais ao conteúdo. Confira o PDF original baixado do sistema, sem salvar de novo');
+      }
+      // o espaço reservado é completado com zeros: lê só a estrutura CMS do início
+      const hex = text.slice(a + b + 1, c - 1);
+      const cms = A.fromDer(hexToBytes(hex.length % 2 ? hex + '0' : hex), { parseAllBytes: false } as any);
       const sd = ((cms.value as forge.asn1.Asn1[])[1].value as forge.asn1.Asn1[])[0].value as forge.asn1.Asn1[];
       const certNode = sd.find(n => n.tagClass === C.CONTEXT_SPECIFIC && n.type === 0);
       const certs = ((certNode?.value || []) as forge.asn1.Asn1[]).map(n => { try { return forge.pki.certificateFromAsn1(n); } catch { return null; } }).filter(Boolean) as forge.pki.Certificate[];
@@ -317,7 +325,8 @@ export function verifyPdfSignatures(pdf: Uint8Array): PdfSignatureReport {
         ? (icpOk ? 'ok' : 'aviso')
         : 'erro';
     } catch (err) {
-      messages.push(`não foi possível ler a assinatura (${err instanceof Error ? err.message : String(err)})`);
+      messages.push(rewritten ? (err instanceof Error ? err.message : String(err)) : `não foi possível ler a assinatura (${err instanceof Error ? err.message : String(err)})`);
+      check.rewritten = rewritten;
     }
   }
   return { signatures, validationCodes };

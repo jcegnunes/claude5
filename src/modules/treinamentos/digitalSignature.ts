@@ -218,6 +218,30 @@ export function isCertExpired(info: Pick<SigningCertInfo, 'validTo'>, now = new 
 
 /** Assina o PDF com cada certificado, na ordem (uma atualização incremental por assinatura). */
 /**
+ * Corrige o "startxref" da última atualização do PDF: a biblioteca do espaço da
+ * assinatura grava a posição 1 byte antes da palavra "xref". Leitores como
+ * Adobe e Foxit tratam isso como arquivo danificado, "reparam" e pedem para
+ * salvar — e ao salvar regravam o arquivo, perdendo a assinatura.
+ * Feito ANTES de assinar (o trecho faz parte do conteúdo assinado).
+ */
+export function fixLastStartxref(pdf: Uint8Array): Uint8Array {
+  let s = '';
+  for (let i = 0; i < pdf.length; i += 0x8000) s += String.fromCharCode(...pdf.subarray(i, i + 0x8000));
+  const sx = s.lastIndexOf('startxref');
+  if (sx < 0) return pdf;
+  const m = /^startxref\s*?(\r?\n)(\d+)/.exec(s.slice(sx));
+  if (!m) return pdf;
+  const declared = Number(m[2]);
+  if (s.startsWith('xref', declared)) return pdf;
+  // tabela xref mais próxima antes do trailer (ignora o "xref" de "startxref")
+  const real = s.lastIndexOf('\nxref', sx) + 1;
+  if (real <= 0 || !s.startsWith('xref', real)) return pdf;
+  const numStart = sx + m[0].length - m[2].length;
+  const fixed = s.slice(0, numStart) + String(real) + s.slice(numStart + m[2].length);
+  return Uint8Array.from(fixed, c => c.charCodeAt(0));
+}
+
+/**
  * Assina o PDF no padrão ICP-Brasil: PAdES (ETSI.CAdES.detached) com a
  * Política de Assinatura AD-RB (ver pades.ts). Uma atualização incremental por
  * assinatura, então as anteriores continuam válidas.
@@ -260,6 +284,7 @@ export async function signPdf(pdf: Uint8Array, signers: PdfSigner[]): Promise<Ui
       signatureLength: 24000,
       subFilter: (utils as any).SUBFILTER_ETSI_CADES_DETACHED
     });
+    buf = Buffer.from(fixLastStartxref(new Uint8Array(buf)));
     buf = Buffer.from(await signpdf.sign(buf, new IcpBrasilSigner(loaded)));
   }
   return new Uint8Array(buf);

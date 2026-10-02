@@ -168,6 +168,12 @@ faixas dos ensaios (sem número repetido entre aparelhos).
   cadeia e data, e o botão para consultar o código VAL-TRE impresso no PDF. O arquivo é
   conferido só no navegador. A revogação (LCR) não é consultada — para o laudo oficial use
   validar.iti.gov.br. Certificado A3 (token/cartão) não é suportado no navegador.
+- **Correção (01/10/2026):** a biblioteca que reserva o espaço da assinatura gravava o
+  `startxref` da atualização 1 byte antes da tabela. Leitores (Adobe/Foxit) tratavam o PDF
+  como danificado, "reparavam" e pediam para salvar — a cópia salva perdia a assinatura. O
+  ponteiro agora é corrigido antes de assinar (testado: todas as tabelas apontam certo). O
+  validador do sistema também passou a avisar claramente quando o arquivo foi regravado por
+  outro programa. Oriente: guardar e enviar o PDF exatamente como baixado do sistema.
 - Certificados cuja cadeia não chega à AC Raiz v5 ou v12 (ex.: certificado de teste) aparecem
   como "assinatura íntegra, mas não confirmada como ICP-Brasil".
 - Requer executar de novo `supabase/modules/treinamentos.sql`.
