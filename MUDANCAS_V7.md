@@ -185,6 +185,10 @@ faixas dos ensaios (sem número repetido entre aparelhos).
   (teste que simula o navegador garante). Também: textos do dicionário da assinatura (Razão,
   Nome, Localização) em ASCII e cabeçalho `%PDF-1.7`. PDFs gerados antes desta correção
   precisam ser gerados de novo.
+- **Depois de publicar uma versão nova** com a página aberta, partes carregadas sob demanda
+  (ex.: assinatura digital) não existem mais no servidor ("Failed to fetch dynamically imported
+  module"). O sistema agora avisa e recarrega a página uma vez sozinho; e não entrega mais PDF
+  sem assinatura nesse caso (pede para recarregar e baixar de novo).
 - Certificados cuja cadeia não chega à AC Raiz v5 ou v12 (ex.: certificado de teste) aparecem
   como "assinatura íntegra, mas não confirmada como ICP-Brasil".
 - Requer executar de novo `supabase/modules/treinamentos.sql`.

@@ -443,7 +443,12 @@ export async function exportTrainingCertificates(certs: TrainingCertificate[], f
         bytes = await signPdf(bytes, plan.signers);
         signedCount++;
       } catch (err) {
-        warnings.add(`Falha na assinatura digital (${err instanceof Error ? err.message : String(err)}): o PDF de ${cert.participantName} saiu sem assinatura.`);
+        const msg = err instanceof Error ? err.message : String(err);
+        // parte do sistema não carregou (versão nova publicada / sem conexão): não entrega PDF sem assinatura
+        if (/dynamically imported module|Importing a module script failed|Failed to fetch|error loading dynamically/i.test(msg)) {
+          throw new Error('Não foi possível carregar a assinatura digital — o sistema pode ter sido atualizado. Recarregue a página (Ctrl+F5) e baixe de novo.');
+        }
+        warnings.add(`Falha na assinatura digital (${msg}): o PDF de ${cert.participantName} saiu sem assinatura.`);
         const plain = newCertificateDoc();
         await drawCertificate(plain, cert, company, assets);
         bytes = new Uint8Array(plain.output('arraybuffer'));

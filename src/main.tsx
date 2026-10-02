@@ -6,9 +6,13 @@ import { initLocalStore } from './services/localStore';
 import { MANAGED_STORAGE_KEYS } from './services/storageKeys';
 import { MODULE_STORAGE_KEYS } from './modules/storageKeys';
 import { ensureWebStorage } from './utils/storageFallback';
+import { installStaleChunkReload } from './utils/staleChunkReload';
 
 // Iframe restrito (sem acesso ao armazenamento): usa memória
 ensureWebStorage();
+
+// Versão nova publicada com a página aberta: recarrega quando faltar um arquivo antigo
+installStaleChunkReload();
 
 // Instalação pelo navegador (PWA) + armazenamento persistente dos dados offline
 initPwaInstall();
