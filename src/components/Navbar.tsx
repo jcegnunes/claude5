@@ -15,8 +15,10 @@ import {
   Camera,
   Building2,
   LogOut,
-  Sparkles
+  Sparkles,
+  Lock
 } from 'lucide-react';
+import { SwitchUserDialog, switchableUsers } from './SwitchUserDialog';
 import { User, Company } from '../types';
 import { DielectricStorageService } from '../services/syncEngine';
 import { AuthService } from '../services/authService';
@@ -24,6 +26,8 @@ import { AuthService } from '../services/authService';
 interface NavbarProps {
   currentUser: User;
   onUserChange: (user: User) => void;
+  /** Troca de usuário concluída (senha conferida) */
+  onUserSwitched?: (user: User) => void;
   isOnline: boolean;
   onToggleOnline: () => void;
   onOpenQRScanner: () => void;
@@ -42,6 +46,7 @@ interface NavbarProps {
 export const Navbar: React.FC<NavbarProps> = ({
   currentUser,
   onUserChange,
+  onUserSwitched,
   isOnline,
   onToggleOnline,
   onOpenQRScanner,
@@ -62,6 +67,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [companies, setCompanies] = useState<Company[]>(() => DielectricStorageService.getCompanies());
   const [activeCompany, setActiveCompany] = useState<Company>(() => DielectricStorageService.getActiveCompany());
   const [users, setUsers] = useState<User[]>(() => DielectricStorageService.getUsers());
+  const [switchTarget, setSwitchTarget] = useState<User | null>(null);
 
   const refreshData = () => {
     setCompanies(DielectricStorageService.getCompanies());
@@ -290,23 +296,23 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </div>
                 </div>
 
-                {/* Multiple Users Switcher */}
+                {/* Troca de usuário: só com a senha do usuário escolhido */}
                 <div className="px-4 py-2 border-b border-slate-100 flex items-center justify-between">
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                     Alternar Usuário
                   </p>
-                  <span className="text-[10px] text-slate-400">
-                    {users.length} cadastrado(s)
+                  <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                    <Lock className="w-3 h-3" /> pede a senha
                   </span>
                 </div>
 
                 <div className="max-h-48 overflow-y-auto">
-                  {users.map(u => (
+                  {[currentUser, ...switchableUsers(currentUser)].map(u => (
                     <button
                       key={u.id}
                       onClick={() => {
-                        onUserChange(u);
                         setUserDropdownOpen(false);
+                        if (u.id !== currentUser.id) setSwitchTarget(u);
                       }}
                       className={`w-full text-left px-4 py-2 text-xs flex items-center justify-between hover:bg-slate-50 transition-colors cursor-pointer ${
                         currentUser.id === u.id ? 'bg-orange-50 font-bold text-orange-950' : 'text-slate-700'
@@ -367,6 +373,14 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         </div>
       </div>
+      {switchTarget && (
+        <SwitchUserDialog
+          currentUser={currentUser}
+          target={switchTarget}
+          onClose={() => setSwitchTarget(null)}
+          onSwitched={u => { setSwitchTarget(null); (onUserSwitched || onUserChange)(u); }}
+        />
+      )}
     </header>
   );
 };

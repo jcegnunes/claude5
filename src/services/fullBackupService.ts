@@ -2,6 +2,7 @@ import { getPhotoBlob, PHOTO_REF_PREFIX } from './photoStore';
 import { inlineTestPhotos } from './photoExternalizer';
 import JSZip from 'jszip';
 import { DielectricStorageService } from './syncEngine';
+import { exportModuleBackups, restoreModuleBackups } from '../modules/backup';
 import { saveFileLocally } from '../utils/nativeFileSaver';
 import {
   TestRecord,
@@ -342,7 +343,9 @@ export class FullBackupService {
       norms,
       tests,
       users,
-      audit: auditLogs
+      audit: auditLogs,
+      // módulos da plataforma (ex.: Treinamentos: cursos, instrutores, turmas e certificados)
+      modules: exportModuleBackups()
     };
 
     zip.file('backup_completo_jvm.json', JSON.stringify(databaseDump, null, 2));
@@ -703,7 +706,8 @@ JVM Engenharia • Laboratório de Ensaios Dielétricos em EPIs e EPCs (NR-10)
       norms,
       tests: sanitizedTests,
       users,
-      audit: auditLogs
+      audit: auditLogs,
+      modules: exportModuleBackups()
     };
 
     const jsonStr = JSON.stringify(fullData, null, 2);
@@ -868,12 +872,16 @@ JVM Engenharia • Laboratório de Ensaios Dielétricos em EPIs e EPCs (NR-10)
       DielectricStorageService.saveCompanyInfo(company);
     }
 
+    // módulos da plataforma (backups antigos não têm esta seção)
+    const modulesRestored = restoreModuleBackups(data.modules);
+    const trainingRestored = modulesRestored.treinamentos || 0;
+
     // Record audit
     DielectricStorageService.addAuditLog(
       'CADASTRO',
       'Backup',
       file.name,
-      `Restauração completa de backup ZIP realizada com sucesso (${tests.length} laudos, ${photosRestoredCount} fotos/arquivos, ${equipment.length} equipamentos).`
+      `Restauração completa de backup ZIP realizada com sucesso (${tests.length} laudos, ${photosRestoredCount} fotos/arquivos, ${equipment.length} equipamentos${trainingRestored ? `, ${trainingRestored} registros de treinamentos` : ''}).`
     );
 
     window.dispatchEvent(new Event('jvm-data-changed'));

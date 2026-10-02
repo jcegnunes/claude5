@@ -172,6 +172,11 @@ faixas dos ensaios (sem número repetido entre aparelhos).
   como "assinatura íntegra, mas não confirmada como ICP-Brasil".
 - Requer executar de novo `supabase/modules/treinamentos.sql`.
 
+**Backup completo:** o backup de Configurações & Backup (ZIP ou JSON) inclui a seção
+`modules.treinamentos` com cursos, instrutores, turmas e certificados; a restauração junta
+por id e envia ao servidor. Os certificados digitais (A1) não entram no backup (ficam só no
+servidor, criptografados). Backups antigos continuam sendo aceitos.
+
 **Ligar/desligar:** Configurações & Backup → Módulos do sistema (por empresa; os dados
 ficam guardados).
 
@@ -235,6 +240,8 @@ UPDATE public.users SET active = false WHERE email = 'maria@empresa.com.br';
 ```
 
 ## O que mudou no app
+
+- **Troca de usuário exige a senha** (menu do usuário e botão "Trocar" do Modo Android): a senha do usuário escolhido é conferida como no login (Supabase Auth; sem internet, só quem já entrou no aparelho nos últimos 30 dias) e a sessão do banco passa a ser a dele. Só aparecem usuários da mesma empresa, ativos e com acesso ao sistema. A troca fica na auditoria e o novo usuário escolhe o módulo, como num login.
 
 - Login pelo Supabase Auth; a sessão fica no aparelho e renova sozinha.
   O acesso offline (quem já entrou nos últimos 30 dias) continua igual.
@@ -390,8 +397,5 @@ A consulta de CNPJ usa, como última alternativa, o proxy público `api.allorigi
 
 ## Pendências recomendadas (não alteradas)
 
-- **Vínculo de ensaio sem cliente/equipamento no banco**: quando o cliente ou o
-  equipamento ainda não chegou ao banco, o ensaio é enviado sem o vínculo técnico
-  (nome e tag continuam gravados). Pode ser trocado por nova tentativa.
 - **Arquivos muito grandes** (`TestWizardView`, `ReportEmissionView`, `syncEngine`...):
   dividir em módulos menores facilita a manutenção.

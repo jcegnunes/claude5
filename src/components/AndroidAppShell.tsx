@@ -37,12 +37,15 @@ import {
   HelpCircle,
   FolderArchive
 } from 'lucide-react';
+import { SwitchUserDialog } from './SwitchUserDialog';
 import { User, TestRecord, Equipment } from '../types';
 import { DielectricStorageService } from '../services/syncEngine';
 
 interface AndroidAppShellProps {
   currentUser: User;
   onUserChange: (user: User) => void;
+  /** Troca de usuário concluída (senha conferida) */
+  onUserSwitched?: (user: User) => void;
   activeView: string;
   onNavigate: (view: string) => void;
   isOnline: boolean;
@@ -65,6 +68,7 @@ interface AndroidAppShellProps {
 export const AndroidAppShell: React.FC<AndroidAppShellProps> = ({
   currentUser,
   onUserChange,
+  onUserSwitched,
   activeView,
   onNavigate,
   isOnline,
@@ -89,6 +93,7 @@ export const AndroidAppShell: React.FC<AndroidAppShellProps> = ({
   const [currentTime, setCurrentTime] = useState<string>('08:30');
 
   const users = DielectricStorageService.getUsers();
+  const [switchingUser, setSwitchingUser] = useState(false);
   const company = DielectricStorageService.getCompanyInfo();
 
   // Keep time updated
@@ -372,12 +377,9 @@ export const AndroidAppShell: React.FC<AndroidAppShellProps> = ({
                     <span className="text-[10px] text-slate-400 font-mono">{currentUser.creaOrCft || currentUser.cargo}</span>
                   </div>
                   <button
-                    onClick={() => {
-                      const nextUser = users.find(u => u.id !== currentUser.id) || users[0];
-                      onUserChange(nextUser);
-                    }}
+                    onClick={() => setSwitchingUser(true)}
                     className="p-1.5 bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 rounded-lg text-[10px] font-bold transition-colors cursor-pointer"
-                    title="Trocar operador ativo"
+                    title="Trocar operador ativo (pede a senha)"
                   >
                     Trocar
                   </button>
@@ -525,6 +527,13 @@ export const AndroidAppShell: React.FC<AndroidAppShellProps> = ({
           <div className="w-28 h-1 bg-slate-600/70 rounded-full" />
         </div>
       </div>
+      {switchingUser && (
+        <SwitchUserDialog
+          currentUser={currentUser}
+          onClose={() => setSwitchingUser(false)}
+          onSwitched={u => { setSwitchingUser(false); (onUserSwitched || onUserChange)(u); }}
+        />
+      )}
     </div>
   );
 };

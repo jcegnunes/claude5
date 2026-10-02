@@ -44,6 +44,7 @@ import {
 import { STORAGE_KEYS } from './storageKeys';
 import { TAPETE_LEAKAGE_LIMIT_MA } from './astmBlanketMattingService';
 import { isManaged, storeGet, storeHas, storeRemove, storeSet } from './localStore';
+import { exportModuleBackups, restoreModuleBackups } from '../modules/backup';
 
 
 
@@ -2394,7 +2395,9 @@ export class DielectricStorageService {
       norms: this.getNorms(),
       tests: this.getTests(),
       audit: this.getAuditLogs(),
-      users: this.getUsers()
+      users: this.getUsers(),
+      // módulos da plataforma (ex.: Treinamentos)
+      modules: exportModuleBackups()
     };
     return JSON.stringify(backup, null, 2);
   }
@@ -2410,6 +2413,7 @@ export class DielectricStorageService {
       if (Array.isArray(data.tests)) this.saveAllTests(data.tests);
       if (Array.isArray(data.users)) this.saveUsers(data.users);
       if (Array.isArray(data.audit)) this.saveAuditLogs(data.audit);
+      if (data.modules) restoreModuleBackups(data.modules);
       if (data.company && data.company.name) {
         const current = this.getCompanyInfo();
         this.saveCompanyInfo({

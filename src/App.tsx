@@ -244,6 +244,15 @@ export default function App() {
     };
   }, []);
 
+  /** Troca de usuário (senha conferida): recomeça como num novo login */
+  const handleUserSwitched = (user: User) => {
+    setCurrentUser(user);
+    setWorkspaceId(null);
+    setActiveView('dashboard');
+    setIsMobileMenuOpen(false);
+    setDataVersion(v => v + 1);
+  };
+
   const handleLogout = () => {
     AuthService.logout();
     setIsAuthenticated(false);
@@ -421,6 +430,7 @@ export default function App() {
         <AndroidAppShell
           currentUser={currentUser}
           onUserChange={setCurrentUser}
+          onUserSwitched={handleUserSwitched}
           activeView={activeView}
           onNavigate={setActiveView}
           isOnline={isOnline}
@@ -658,6 +668,7 @@ export default function App() {
       <Navbar
         currentUser={currentUser}
         onUserChange={setCurrentUser}
+          onUserSwitched={handleUserSwitched}
         isOnline={isOnline}
         onToggleOnline={() => setIsOnline(!isOnline)}
         onOpenQRScanner={() => setIsQRScannerOpen(true)}
