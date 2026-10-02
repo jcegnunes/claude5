@@ -156,10 +156,13 @@ faixas dos ensaios (sem número repetido entre aparelhos).
 - **Padrão ICP-Brasil (DOC-ICP-15.03):** assinatura PAdES `ETSI.CAdES.detached` com a
   Política de Assinatura **PA_PAdES_AD_RB v1.3** (OID 2.16.76.1.7.1.11.1.3, vigente até
   22/10/2037). Atributos assinados exigidos pela política: content-type, message-digest,
-  signing-certificate-v2 e identificador da política (com o hash SHA-256 oficial do
-  documento da política e a URI em politicas.icpbrasil.gov.br); SHA-256 com RSA; sem
-  signing-time (a data fica no /M do PDF). OID e hashes conferidos na lista oficial de
-  políticas (LPA_PAdES.der). Conferido também com o OpenSSL ("CMS Verification successful").
+  signing-certificate-v2 e identificador da política (OID, resumo e URI em
+  politicas.icpbrasil.gov.br); SHA-256 com RSA; sem signing-time (a data fica no /M do
+  PDF). O resumo da política é o **signPolicyHash gravado dentro do documento da política**
+  (v1.3: `23e4be4b…fc60`) — não o SHA-256 do arquivo .der (valor da LPA, `23da544a…54dd`),
+  que o Verificador de Conformidade do ITI recusa ("O resumo criptográfico da política está
+  incorreto"). Conferido com o OpenSSL e com o relatório do ITI (estrutura, caminho de
+  certificação, cifra, resumo e demais atributos aprovados).
 - **Validação no sistema:** no Validador (portal), "Verificar assinatura digital do PDF":
   envie o PDF e o sistema confere, para cada assinatura, integridade (documento não
   alterado), assinatura criptográfica, validade do certificado na data, signing-certificate-v2,

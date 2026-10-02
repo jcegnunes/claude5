@@ -29,7 +29,7 @@ const SignatureCard: React.FC<{ s: SignatureCheck }> = ({ s }) => {
     ['Assinatura criptográfica', yes(s.cryptoValid, 'confere com o certificado', 'não confere')],
     ['Certificado do signatário', yes(s.certValidAtSigning, 'válido na data da assinatura', 'fora da validade na data da assinatura')],
     ['Cadeia ICP-Brasil', yes(s.chainTrusted, `confirmada até ${s.chain[s.chain.length - 1] || 'a AC Raiz'}`, 'não confirmada')],
-    ['Política de assinatura', s.policyOid ? yes(s.policyHashOk, `${s.policyOid} (hash oficial confere)`, `${s.policyOid} (não reconhecida)`) : '✘ ausente'],
+    ['Política de assinatura', s.policyOid ? yes(s.policyHashOk, `${s.policyName || s.policyOid} (resumo da política confere)`, `${s.policyName || s.policyOid} (resumo da política incorreto)`) : '✘ ausente'],
     ['Abrangência', s.coversWholeDocument ? 'cobre o documento inteiro' : 'há atualizações posteriores (outras assinaturas)']
   ];
   return (

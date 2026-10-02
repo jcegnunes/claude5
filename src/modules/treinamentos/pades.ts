@@ -304,8 +304,10 @@ export function verifyPdfSignatures(pdf: Uint8Array): PdfSignatureReport {
         check.policyName = known?.name;
         const hashValue = ((parts[1].value as forge.asn1.Asn1[])[1]).value as string;
         check.policyHashOk = !!known && forge.util.bytesToHex(hashValue) === known.hash;
-        if (!known) messages.push(`política ${check.policyOid} não consta na lista da ICP-Brasil`);
-        else if (!check.policyHashOk) messages.push('hash da política não confere com a lista oficial');
+        if (!known) messages.push(`política ${check.policyOid} não reconhecida pelo sistema`);
+        else if (!check.policyHashOk && forge.util.bytesToHex(hashValue) === known.fileHash) {
+          messages.push('o resumo da política é o do arquivo .der, e não o signPolicyHash da política — o validador do ITI recusa (assinatura gerada por versão anterior do sistema)');
+        } else if (!check.policyHashOk) messages.push('resumo da política não confere com o documento oficial');
       } else {
         messages.push('sem política de assinatura ICP-Brasil (assinatura PAdES básica)');
       }

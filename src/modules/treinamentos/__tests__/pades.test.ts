@@ -74,3 +74,16 @@ describe('Assinatura PAdES no padrão ICP-Brasil', () => {
     expect(verifyPdfSignatures(basePdf()).signatures).toHaveLength(0);
   });
 });
+
+describe('Resumo da política na assinatura (exigência do Verificador do ITI)', () => {
+  it('usa o signPolicyHash do documento da política, não o SHA-256 do arquivo', async () => {
+    const signed = await signPdf(basePdf(), [{ p12: makeP12('X:11144477735', 'a'), password: 'a', name: 'X', reason: 'r' }]);
+    const text = Buffer.from(signed).toString('latin1');
+    const r = [...text.matchAll(/\/ByteRange\s*\[\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*\]/g)][0].slice(1).map(Number);
+    const hex = text.slice(r[0] + r[1] + 1, r[2] - 1);
+    expect(hex).toContain('23e4be4b9b362172e4ebb0e72b86a133ece5aad843d8651c6e38a0ba3f08fc60');
+    expect(hex).not.toContain('23da544aef71f7a75dc85fa6e17a83875741e4baef41ec178258a5c86ace54dd');
+    const [s] = verifyPdfSignatures(signed).signatures;
+    expect(s.policyHashOk).toBe(true);
+  }, 60000);
+});

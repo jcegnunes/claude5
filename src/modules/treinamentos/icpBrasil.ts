@@ -4,27 +4,48 @@
  * Políticas de Assinatura (LPA_PAdES.der) publicada em politicas.icpbrasil.gov.br.
  */
 
-/** Política em uso: PA_PAdES_AD_RB v1.3 (vigente de 23/07/2025 a 22/10/2037). */
+/**
+ * Política em uso: PA_PAdES_AD_RB v1.3 (vigente de 23/07/2025 a 22/10/2037).
+ *
+ * O resumo (sigPolicyHash) colocado na assinatura é o signPolicyHash gravado
+ * DENTRO do documento da política (3º campo do SignaturePolicy) — é o que o
+ * Verificador de Conformidade do ITI compara. O SHA-256 do arquivo .der (valor
+ * da LPA) serve só para conferir o próprio arquivo da política e é recusado
+ * como resumo da política ("O resumo criptográfico da política está incorreto").
+ */
 export const ICP_POLICY = {
   name: 'PA_PAdES_AD_RB_v1_3',
   label: 'PAdES AD-RB v1.3 (ICP-Brasil)',
   oid: '2.16.76.1.7.1.11.1.3',
-  /** SHA-256 do arquivo da política (igual ao publicado na LPA) */
-  hashSha256Hex: '23da544aef71f7a75dc85fa6e17a83875741e4baef41ec178258a5c86ace54dd',
+  /** signPolicyHash do documento PA_PAdES_AD_RB_v1_3.der (SHA-256) */
+  hashSha256Hex: '23e4be4b9b362172e4ebb0e72b86a133ece5aad843d8651c6e38a0ba3f08fc60',
+  /** SHA-256 do arquivo .der, conforme a LPA (conferência do documento) */
+  fileSha256Hex: '23da544aef71f7a75dc85fa6e17a83875741e4baef41ec178258a5c86ace54dd',
   uri: 'http://politicas.icpbrasil.gov.br/PA_PAdES_AD_RB_v1_3.der',
   validUntil: '2037-10-22'
 };
 
-/** Políticas PAdES da LPA (OID -> nome e hash SHA-256 do documento), para a validação. */
-export const ICP_PADES_POLICIES: Record<string, { name: string; hash: string }> = {
-  '2.16.76.1.7.1.11.1': { name: 'AD-RB v1.0', hash: '739a8249a24b681e4b2280e16055d254b26b684a7ac7bc0e5aca234cc0506bbd' },
-  '2.16.76.1.7.1.11.1.1': { name: 'AD-RB v1.1', hash: '95752d26ca974d46675ae7fb787b606a71ea941f26b59f6b6a321f97d63b9cb1' },
-  '2.16.76.1.7.1.11.1.2': { name: 'AD-RB v1.2', hash: '84ed4620c6531e4a4853adecc9e2496926c823418dd3141963ed9c4f9704a03d' },
-  '2.16.76.1.7.1.11.1.3': { name: 'AD-RB v1.3', hash: '23da544aef71f7a75dc85fa6e17a83875741e4baef41ec178258a5c86ace54dd' },
-  '2.16.76.1.7.1.12.1': { name: 'AD-RT v1.0', hash: '92d4f1c9cf16ae43a7e6461470b9474cc97dc9f9ff03ade6eeaf3f1ff8c11380' },
-  '2.16.76.1.7.1.12.1.1': { name: 'AD-RT v1.1', hash: '953f7a202391c912216b9e84cf5dae75fe3e10e7f725fc77b60fca32fbac6426' },
-  '2.16.76.1.7.1.12.1.2': { name: 'AD-RT v1.2', hash: 'da6e12c17e9be0343abbdb494723effcb53fe95f5f0b9bbee1b35bcef3a01eef' },
-  '2.16.76.1.7.1.12.1.3': { name: 'AD-RT v1.3', hash: '92a972e7c292bb884e98e650773d9e9876994effb43eb36199b06bf2864a677c' }
+/**
+ * Políticas PAdES AD-RB para a validação no sistema: OID -> nome, signPolicyHash
+ * (o resumo esperado na assinatura) e o SHA-256 do arquivo (assinaturas geradas
+ * com ele são recusadas pelo ITI). Valores lidos dos documentos oficiais.
+ */
+export const ICP_PADES_POLICIES: Record<string, { name: string; hash: string; fileHash: string }> = {
+  '2.16.76.1.7.1.11.1': {
+    name: 'AD-RB v1.0',
+    hash: '501d69b4b71fc6e57323c2c74131a9c8c62409be378ba788dc288555611b9e58',
+    fileHash: '739a8249a24b681e4b2280e16055d254b26b684a7ac7bc0e5aca234cc0506bbd'
+  },
+  '2.16.76.1.7.1.11.1.1': {
+    name: 'AD-RB v1.1',
+    hash: '44fc5816eb2d705d8c8f022a7f93b3fb49edfae1a7b9149ef6fab833e9bb63f8',
+    fileHash: '95752d26ca974d46675ae7fb787b606a71ea941f26b59f6b6a321f97d63b9cb1'
+  },
+  '2.16.76.1.7.1.11.1.3': {
+    name: 'AD-RB v1.3',
+    hash: '23e4be4b9b362172e4ebb0e72b86a133ece5aad843d8651c6e38a0ba3f08fc60',
+    fileHash: '23da544aef71f7a75dc85fa6e17a83875741e4baef41ec178258a5c86ace54dd'
+  }
 };
 
 /**
