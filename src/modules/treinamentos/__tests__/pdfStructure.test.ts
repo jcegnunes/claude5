@@ -73,3 +73,38 @@ describe('Estrutura do PDF assinado (para leitores não "repararem" o arquivo)',
     expect(s.messages[0]).toContain('regravado por outro programa');
   }, 60000);
 });
+
+describe('Assinatura gerada no NAVEGADOR (Buffer do pacote "buffer")', () => {
+  it('catálogo e página regravados ficam com /AcroForm e /Annots DENTRO do dicionário', async () => {
+    const nodeBuffer = (globalThis as any).Buffer;
+    // pacote npm "buffer" (o que o Vite usa no navegador), não o Buffer do Node
+    const { Buffer: BrowserBuffer } = await import('buffer/index.js');
+    (globalThis as any).Buffer = BrowserBuffer; // simula o navegador
+    try {
+      const doc = new jsPDF({ orientation: 'landscape' });
+      doc.text('Certificado VAL-TRE-2610-ABCD2345', 20, 20);
+      const signed = await signPdf(new Uint8Array(doc.output('arraybuffer')), [
+        { p12: makeP12('JVM ENGENHARIA LTDA:29894500000104', 'a'), password: 'a', name: 'JVM ENGENHARIA LTDA:29894500000104', reason: 'Instrutor – certificado de treinamento', location: 'Brasília/DF' }
+      ]);
+      const s = nodeBuffer.from(signed).toString('latin1');
+      const update = s.slice(s.indexOf('%%EOF') + 5);
+      const objects = [...update.matchAll(/(\d+) 0 obj\s*([\s\S]*?)endobj/g)].map(m => m[2]);
+      const catalog = objects.find(o => o.includes('/Type /Catalog'))!;
+      const page = objects.find(o => o.includes('/Type /Page'))!;
+      // dicionário fecha só no fim, depois de /AcroForm e /Annots
+      expect(catalog.trim()).toMatch(/\/AcroForm \d+ 0 R\s*>>$/);
+      expect(catalog.slice(0, catalog.indexOf('/AcroForm'))).not.toContain('>>');
+      expect(page.slice(0, page.indexOf('/Annots'))).not.toMatch(/>>\s*$/);
+      expect(page.trim().endsWith('>>')).toBe(true);
+      // textos em ASCII e cabeçalho 1.7
+      expect(update).toContain('/Reason (Instrutor - certificado de treinamento)');
+      expect(update).toContain('/Location (Brasilia/DF)');
+      expect(s.slice(0, 8)).toBe('%PDF-1.7');
+      expect(xrefProblems(signed)).toEqual([]);
+      const [sig] = verifyPdfSignatures(signed).signatures;
+      expect(sig.integrity && sig.cryptoValid).toBe(true);
+    } finally {
+      (globalThis as any).Buffer = nodeBuffer;
+    }
+  }, 60000);
+});

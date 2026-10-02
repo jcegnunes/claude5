@@ -218,6 +218,46 @@ export function isCertExpired(info: Pick<SigningCertInfo, 'validTo'>, now = new 
 
 /** Assina o PDF com cada certificado, na ordem (uma atualização incremental por assinatura). */
 /**
+ * O "Buffer" do navegador (pacote buffer) trata indexOf/lastIndexOf(valor, 'utf8')
+ * como posição 0, diferente do Node (codificação). A biblioteca do espaço da
+ * assinatura usa essa forma para achar o fim do dicionário: no navegador ela
+ * fechava o catálogo e a página antes de /AcroForm e /Annots, e validadores
+ * (ITI) não reconheciam a assinatura. Aqui o comportamento fica igual ao do Node.
+ */
+export function patchBufferSearch(B: any): void {
+  if (!B?.prototype || B.prototype.__jvmSearchPatched) return;
+  for (const name of ['indexOf', 'lastIndexOf', 'includes']) {
+    const original = B.prototype[name];
+    if (typeof original !== 'function') continue;
+    B.prototype[name] = function (value: unknown, byteOffset?: unknown, encoding?: unknown) {
+      return typeof byteOffset === 'string'
+        ? original.call(this, value, undefined, byteOffset)
+        : original.call(this, value, byteOffset, encoding);
+    };
+  }
+  B.prototype.__jvmSearchPatched = true;
+}
+
+/** Textos do dicionário da assinatura só em ASCII (a biblioteca corrompe acentos). */
+export function pdfAscii(text: string): string {
+  return (text || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\u2013\u2014]/g, '-')
+    .replace(/[^\x20-\x7E]/g, '')
+    .replace(/[()\\]/g, '')
+    .trim();
+}
+
+/** PAdES (ETSI.CAdES.detached) pressupõe PDF 1.7: ajusta o cabeçalho (mesmo tamanho). */
+export function setPdfVersion17(pdf: Uint8Array): Uint8Array {
+  const head = String.fromCharCode(...pdf.subarray(0, 8));
+  if (!/^%PDF-1\.[0-6]$/.test(head)) return pdf;
+  const out = new Uint8Array(pdf);
+  out[7] = '7'.charCodeAt(0);
+  return out;
+}
+
+/**
  * Corrige o "startxref" da última atualização do PDF: a biblioteca do espaço da
  * assinatura grava a posição 1 byte antes da palavra "xref". Leitores como
  * Adobe e Foxit tratam isso como arquivo danificado, "reparam" e pedem para
@@ -248,8 +288,11 @@ export function fixLastStartxref(pdf: Uint8Array): Uint8Array {
  */
 export async function signPdf(pdf: Uint8Array, signers: PdfSigner[]): Promise<Uint8Array> {
   if (!signers.length) return pdf;
-  const { Buffer } = await import('buffer');
-  (globalThis as any).Buffer = (globalThis as any).Buffer || Buffer;
+  // Buffer global: no navegador é o do pacote "buffer" (o mesmo que a biblioteca usa)
+  const { Buffer: PolyBuffer } = await import('buffer');
+  const B: any = (globalThis as any).Buffer || PolyBuffer;
+  (globalThis as any).Buffer = B;
+  patchBufferSearch(B);
   const [{ plainAddPlaceholder }, utils, signpdfModule, pades] = await Promise.all([
     import('@signpdf/placeholder-plain'),
     import('@signpdf/utils'),
@@ -262,12 +305,14 @@ export async function signPdf(pdf: Uint8Array, signers: PdfSigner[]): Promise<Ui
   class IcpBrasilSigner extends (utils as any).Signer {
     constructor(private loaded: ReturnType<typeof pades.loadP12>) { super(); }
     async sign(content: Uint8Array) {
-      return Buffer.from(pades.createIcpBrasilCms(new Uint8Array(content), this.loaded));
+      return B.from(pades.createIcpBrasilCms(new Uint8Array(content), this.loaded));
     }
   }
 
   // Buffer do pacote "buffer" (navegador)
-  let buf: any = Buffer.from(pdf);
+  // só antes da primeira assinatura (depois o cabeçalho faz parte do conteúdo assinado)
+  const alreadySigned = B.from(pdf).includes('/ByteRange');
+  let buf: any = B.from(alreadySigned ? pdf : setPdfVersion17(pdf));
   for (const s of signers) {
     let loaded: ReturnType<typeof pades.loadP12>;
     try {
@@ -277,15 +322,15 @@ export async function signPdf(pdf: Uint8Array, signers: PdfSigner[]): Promise<Ui
     }
     buf = plainAddPlaceholder({
       pdfBuffer: buf,
-      reason: s.reason,
+      reason: pdfAscii(s.reason),
       contactInfo: '',
-      name: s.name,
-      location: s.location || 'Brasil',
+      name: pdfAscii(s.name),
+      location: pdfAscii(s.location || 'Brasil'),
       signatureLength: 24000,
       subFilter: (utils as any).SUBFILTER_ETSI_CADES_DETACHED
     });
-    buf = Buffer.from(fixLastStartxref(new Uint8Array(buf)));
-    buf = Buffer.from(await signpdf.sign(buf, new IcpBrasilSigner(loaded)));
+    buf = B.from(fixLastStartxref(new Uint8Array(buf)));
+    buf = B.from(await signpdf.sign(buf, new IcpBrasilSigner(loaded)));
   }
   return new Uint8Array(buf);
 }

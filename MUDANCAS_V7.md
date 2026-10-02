@@ -174,6 +174,14 @@ faixas dos ensaios (sem número repetido entre aparelhos).
   ponteiro agora é corrigido antes de assinar (testado: todas as tabelas apontam certo). O
   validador do sistema também passou a avisar claramente quando o arquivo foi regravado por
   outro programa. Oriente: guardar e enviar o PDF exatamente como baixado do sistema.
+- **Correção (02/10/2026) — validador do ITI "sem assinatura reconhecível":** no navegador, a
+  biblioteca do espaço da assinatura usava `lastIndexOf('>>', 'utf8')`, que o Buffer do navegador
+  interpreta como posição 0; com isso o catálogo e a página eram regravados com o dicionário
+  fechado antes de `/AcroForm` e `/Annots` (sintaxe inválida), e leitores rígidos não
+  encontravam o campo de assinatura. O Buffer foi ajustado para se comportar como o do Node
+  (teste que simula o navegador garante). Também: textos do dicionário da assinatura (Razão,
+  Nome, Localização) em ASCII e cabeçalho `%PDF-1.7`. PDFs gerados antes desta correção
+  precisam ser gerados de novo.
 - Certificados cuja cadeia não chega à AC Raiz v5 ou v12 (ex.: certificado de teste) aparecem
   como "assinatura íntegra, mas não confirmada como ICP-Brasil".
 - Requer executar de novo `supabase/modules/treinamentos.sql`.
