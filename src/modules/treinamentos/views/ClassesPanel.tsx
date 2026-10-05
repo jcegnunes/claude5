@@ -4,11 +4,11 @@ import { downloadParticipantsTemplate, readSpreadsheet } from '../spreadsheetFil
 import { normalizeText, parseParticipantRows } from '../spreadsheetImport';
 import { DielectricStorageService } from '../../../services/syncEngine';
 import {
-  canDeleteTraining, canEditTraining, cancelCertificate, currentCompanyId, deleteClass, getCertificate, getCertificates,
+  activeClassCertificates, canDeleteTraining, canEditTraining, cancelCertificate, currentCompanyId, deleteClass, deleteClassAndCancelCertificates, getCertificate, getCertificates,
   getClasses, getCourse, getCourses, getInstructors, issueCertificatesForClass, saveCertificate, saveClass
 } from '../repository';
 import { exportAttendanceList, exportTrainingCertificates } from '../certificatePdf';
-import { formatCpf, formatDateBr, formatHours, isParticipantApproved, isValidCpf, newId, todayIso } from '../rules';
+import { formatCpf, formatDateBr, formatHours, isApprovedInClass, isValidCpf, newId, todayIso } from '../rules';
 import type { TrainingClass, TrainingClassStatus, TrainingParticipant } from '../types';
 import { alertError, btnPrimary, btnSecondary, cardCls, EmptyState, Field, inputCls, Modal } from './ui';
 
@@ -46,7 +46,7 @@ export const ClassesPanel: React.FC = () => {
   const handleIssue = async (t: TrainingClass) => {
     const course = getCourse(t.courseId);
     if (!course) return window.alert('O curso desta turma não existe mais. Edite a turma e escolha o curso.');
-    const pending = t.participants.filter(p => !p.certificateId && isParticipantApproved(p, course));
+    const pending = t.participants.filter(p => !p.certificateId && isApprovedInClass(p, course));
     if (!pending.length) return window.alert('Não há alunos aprovados sem certificado nesta turma. Confira presença e nota.');
     if (!t.instructorIds.length && !window.confirm('A turma está sem instrutor. Emitir mesmo assim?')) return;
     if (!window.confirm(`Emitir ${pending.length} certificado(s) para os aprovados da turma ${t.classNumber}?`)) return;
@@ -76,11 +76,18 @@ export const ClassesPanel: React.FC = () => {
   };
 
   const handleDelete = (t: TrainingClass) => {
-    if (certificates.some(c => c.classId === t.id)) {
-      window.alert('A turma tem certificados emitidos. Cancele a turma (status "Cancelada") em vez de excluir.');
+    const active = activeClassCertificates(t.id);
+    if (!active.length) {
+      if (window.confirm(`Excluir a turma ${t.classNumber}?`)) deleteClass(t.id);
       return;
     }
-    if (window.confirm(`Excluir a turma ${t.classNumber}?`)) deleteClass(t.id);
+    const list = active.slice(0, 10).map(c => `  • ${c.certificateNumber} — ${c.participantName}`).join('\n')
+      + (active.length > 10 ? `\n  … e mais ${active.length - 10}` : '');
+    if (!window.confirm(`Excluir a turma ${t.classNumber}?\n\nOs ${active.length} certificado(s) emitido(s) serão CANCELADOS (o QR Code passa a mostrar "cancelado"):\n${list}\n\nEsta ação não pode ser desfeita.`)) return;
+    const reason = window.prompt('Motivo do cancelamento (aparece no validador):', `Turma ${t.classNumber} excluída`);
+    if (reason === null) return;
+    const cancelled = deleteClassAndCancelCertificates(t.id, reason);
+    window.alert(`Turma ${t.classNumber} excluída e ${cancelled.length} certificado(s) cancelado(s).`);
   };
 
   return (
@@ -104,9 +111,9 @@ export const ClassesPanel: React.FC = () => {
         <div className="space-y-2">
           {classes.map(t => {
             const course = getCourse(t.courseId);
-            const approved = course ? t.participants.filter(p => isParticipantApproved(p, course)).length : 0;
+            const approved = course ? t.participants.filter(p => isApprovedInClass(p, course)).length : 0;
             const issued = certificates.filter(c => c.classId === t.id).length;
-            const pending = course ? t.participants.filter(p => !p.certificateId && isParticipantApproved(p, course)).length : 0;
+            const pending = course ? t.participants.filter(p => !p.certificateId && isApprovedInClass(p, course)).length : 0;
             return (
               <div key={t.id} className={`${cardCls} p-4`}>
                 <div className="flex flex-wrap items-start justify-between gap-2">
@@ -116,6 +123,7 @@ export const ClassesPanel: React.FC = () => {
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${STATUS_CLS[t.status]}`}>{STATUS_LABEL[t.status]}</span>
                     </div>
                     <h4 className="font-bold text-sm text-slate-900 leading-snug mt-0.5">{t.courseName}</h4>
+                    {!course && <p className="text-[11px] text-amber-700">Curso excluído — edite a turma e escolha outro curso para emitir certificados.</p>}
                     <p className="text-[11px] text-slate-500">
                       {formatDateBr(t.startDate)}{t.endDate && t.endDate !== t.startDate ? ` a ${formatDateBr(t.endDate)}` : ''} · {formatHours(t.workloadHours)}
                       {t.location ? ` · ${t.location}` : ''}{t.clientName ? ` · ${t.clientName}` : ''}
@@ -229,7 +237,7 @@ const ClassEditor: React.FC<{ turma: TrainingClass; onClose: () => void }> = ({ 
     for (const p of participants) {
       const cert = p.certificateId ? getCertificate(p.certificateId) : undefined;
       if (!cert) continue;
-      if (cert.status === 'valido' && !isParticipantApproved(p, course)) {
+      if (cert.status === 'valido' && !isApprovedInClass(p, course)) {
         if (!window.confirm(`${p.name} deixou de atingir o mínimo do curso (presença ${course.minAttendance}%${course.minGrade !== undefined ? `, nota ${course.minGrade}` : ''}).\nCancelar o certificado ${cert.certificateNumber}?\n\nOK = cancelar · Cancelar = voltar e conferir`)) return;
         toCancel.push({ id: cert.id, reason: 'Aluno reprovado após correção da presença/nota' });
         // se a nota for corrigida de novo, o aluno pode receber um novo certificado
@@ -320,7 +328,7 @@ const ClassEditor: React.FC<{ turma: TrainingClass; onClose: () => void }> = ({ 
         <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
           <h4 className="font-bold text-xs text-slate-800">
             Alunos ({t.participants.length})
-            {course && <span className="font-normal text-slate-500"> · aprovação: presença ≥ {course.minAttendance}%{course.minGrade !== undefined && course.minGrade !== null ? ` e nota ≥ ${course.minGrade}` : ''}</span>}
+            {course && <span className="font-normal text-slate-500"> · aprovação: presença ≥ {course.minAttendance}%</span>}
           </h4>
           <div className="flex gap-2">
             <button type="button" className={btnSecondary} title="Baixar planilha modelo (Nome, CPF, Colaborador da Empresa)" onClick={() => downloadParticipantsTemplate().catch(err => alertError(err, 'Falha ao gerar o modelo'))}><Download className="w-3.5 h-3.5" /> Modelo</button>
@@ -337,16 +345,14 @@ const ClassEditor: React.FC<{ turma: TrainingClass; onClose: () => void }> = ({ 
         ) : (
           <div className="space-y-2">
             {t.participants.map((p, idx) => {
-              const ok = course ? isParticipantApproved(p, course) : false;
+              const ok = course ? isApprovedInClass(p, course) : false;
               const cpfBad = !!p.cpf && !isValidCpf(p.cpf);
               return (
                 <div key={p.id} className={`grid grid-cols-2 sm:grid-cols-12 gap-2 items-end p-2 rounded-xl border ${p.certificateId ? 'border-emerald-200 bg-emerald-50/40' : 'border-slate-200'}`}>
-                  <Field label={`${idx + 1}. Nome`} className="col-span-2 sm:col-span-3"><input className={inputCls} value={p.name} onChange={e => setP(p.id, { name: e.target.value })} /></Field>
-                  <Field label="CPF" className="sm:col-span-2"><input className={`${inputCls} ${cpfBad ? 'border-red-400' : ''}`} value={p.cpf} onChange={e => setP(p.id, { cpf: e.target.value })} onBlur={e => setP(p.id, { cpf: formatCpf(e.target.value) })} inputMode="numeric" /></Field>
-                  <Field label="Função" className="sm:col-span-2"><input className={inputCls} value={p.role || ''} onChange={e => setP(p.id, { role: e.target.value })} /></Field>
-                  <Field label="Empresa" className="sm:col-span-2"><input className={inputCls} value={p.company || ''} onChange={e => setP(p.id, { company: e.target.value })} /></Field>
-                  <Field label="Presença %"><input type="number" min={0} max={100} className={inputCls} value={p.attendance} onChange={e => setP(p.id, { attendance: Number(e.target.value) })} /></Field>
-                  <Field label="Nota" className="sm:col-span-2"><input type="number" min={0} max={10} step={0.1} className={inputCls} value={p.grade ?? ''} onChange={e => setP(p.id, { grade: e.target.value === '' ? undefined : Number(e.target.value) })} /></Field>
+                  <Field label={`${idx + 1}. Nome`} className="col-span-2 sm:col-span-4"><input className={inputCls} value={p.name} onChange={e => setP(p.id, { name: e.target.value })} /></Field>
+                  <Field label="CPF" className="sm:col-span-3"><input className={`${inputCls} ${cpfBad ? 'border-red-400' : ''}`} value={p.cpf} onChange={e => setP(p.id, { cpf: e.target.value })} onBlur={e => setP(p.id, { cpf: formatCpf(e.target.value) })} inputMode="numeric" /></Field>
+                  <Field label="Empresa" className="sm:col-span-3"><input className={inputCls} value={p.company || ''} onChange={e => setP(p.id, { company: e.target.value })} /></Field>
+                  <Field label="Presença %" className="sm:col-span-2"><input type="number" min={0} max={100} className={inputCls} value={p.attendance} onChange={e => setP(p.id, { attendance: Number(e.target.value) })} /></Field>
                   <div className="col-span-2 sm:col-span-12 flex items-center gap-1 justify-end -mt-1">
                     {p.certificateId ? (
                       <>

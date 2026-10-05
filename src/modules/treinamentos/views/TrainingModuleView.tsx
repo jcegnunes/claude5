@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { GraduationCap, RefreshCw, AlertTriangle, CloudOff, LayoutDashboard, Users, Award, BookOpen, UserCheck } from 'lucide-react';
+import { GraduationCap, RefreshCw, AlertTriangle, CloudOff, LayoutDashboard, Users, Award, BookOpen, UserCheck, Palette } from 'lucide-react';
 import { ensureDefaultCourses, getTrainingConflicts, pendingTrainingCount, subscribeTraining } from '../repository';
 import {
   getTrainingSyncStatus, resolveConflictKeepMine, resolveConflictUseServer, startTrainingSync, subscribeTrainingSync, syncTraining
@@ -9,16 +9,18 @@ import { ClassesPanel } from './ClassesPanel';
 import { CertificatesPanel } from './CertificatesPanel';
 import { CoursesPanel } from './CoursesPanel';
 import { InstructorsPanel } from './InstructorsPanel';
+import { LayoutPanel } from './LayoutPanel';
 import { alertError, btnSecondary, cardCls } from './ui';
 
-type Tab = 'painel' | 'turmas' | 'certificados' | 'cursos' | 'instrutores';
+type Tab = 'painel' | 'turmas' | 'certificados' | 'cursos' | 'instrutores' | 'layout';
 
 const TABS: Array<{ id: Tab; label: string; icon: React.ElementType }> = [
   { id: 'painel', label: 'Painel', icon: LayoutDashboard },
   { id: 'turmas', label: 'Turmas', icon: Users },
   { id: 'certificados', label: 'Certificados', icon: Award },
   { id: 'cursos', label: 'Cursos', icon: BookOpen },
-  { id: 'instrutores', label: 'Instrutores', icon: UserCheck }
+  { id: 'instrutores', label: 'Instrutores', icon: UserCheck },
+  { id: 'layout', label: 'Layout do certificado', icon: Palette }
 ];
 
 /** Tela principal do módulo Treinamentos. */
@@ -102,6 +104,7 @@ export const TrainingModuleView: React.FC = () => {
       {tab === 'certificados' && <CertificatesPanel key={certFilter} initialFilter={certFilter} />}
       {tab === 'cursos' && <CoursesPanel />}
       {tab === 'instrutores' && <InstructorsPanel />}
+      {tab === 'layout' && <LayoutPanel />}
     </div>
   );
 };

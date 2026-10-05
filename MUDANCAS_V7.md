@@ -100,6 +100,30 @@ e mostra o aviso para executar o script.
   mantém número e QR Code; aluno excluído tem o certificado **cancelado**; aluno que deixa
   de atingir o mínimo do curso tem o certificado cancelado (com confirmação) e pode
   receber um novo se for corrigido. Nota de 0 a 10 e presença de 0 a 100% são conferidas.
+- **Tela da turma sem Função e Nota** (Nova turma / Editar turma): cada aluno tem só Nome,
+  CPF, Empresa e Presença %. Na turma a aprovação é pela presença mínima do curso; a nota
+  só conta quando veio de uma planilha importada, e quem a importação reprovou continua
+  reprovado.
+- **Excluir turma** (administrador): a turma é excluída e **todos os certificados dela
+  são cancelados** com um motivo (padrão "Turma TUR-… excluída"). Antes de excluir aparece
+  a lista dos certificados que serão cancelados. Os certificados continuam na aba
+  Certificados e o QR Code passa a mostrar CANCELADO.
+- **Excluir curso** (administrador) mesmo com turmas ativas ou certificados emitidos: a
+  confirmação lista as turmas e os certificados do curso. **Todos os certificados do curso
+  são cancelados** com um motivo (padrão "Curso … excluído"); o QR Code passa a mostrar
+  CANCELADO. As turmas continuam e mostram "Curso excluído": para emitir novos
+  certificados, edite a turma e escolha outro curso.
+- **Validador**: a tela de validação do certificado de treinamento não mostra mais o botão
+  "Baixar certificado (PDF)"; o PDF é baixado só pelo módulo Treinamentos.
+- **Layout do certificado** (nova aba em Treinamentos; administrador ou RT altera):
+  logo (da empresa, próprio do certificado ou nenhum; posição esquerda/centro/direita e
+  tamanho, sem distorcer), dados da empresa no cabeçalho, título, subtítulo, frase antes do
+  nome, **texto padrão** com campos ({curso}, {norma}, {periodo}, {local}, {carga_horaria},
+  {nome}, {cpf}, {empresa}, {validade}, {turma}…), texto complementar, linha de CPF/empresa,
+  "Válido até", **assinaturas** (quantos instrutores, RT, participante e os cargos), cores,
+  moldura e verso (título e aproveitamento). Pré-visualização do PDF ao lado. Fica nos dados
+  da empresa: sincroniza entre aparelhos e entra no backup. A assinatura digital ICP-Brasil é
+  aplicada só para quem aparece no certificado. O padrão reproduz o certificado anterior.
 - **Certificados**: emissão individual (sem turma), busca por nome/CPF/número, PDF,
   link de validação, cancelamento com motivo (o validador mostra CANCELADO).
 - **Painel**: emitidos no ano, turmas abertas, vencendo em 60 dias e vencidos sem

@@ -183,12 +183,16 @@ export interface SignaturePlan {
 }
 
 /** Quem assina este certificado: Responsável Técnico e instrutores com certificado digital. */
-export async function planSignatures(cert: TrainingCertificate): Promise<SignaturePlan> {
+export async function planSignatures(
+  cert: TrainingCertificate,
+  options: { includeTechnicalResponsible?: boolean; maxInstructors?: number } = {}
+): Promise<SignaturePlan> {
   const plan: SignaturePlan = { signers: [], names: [], stamps: {}, warnings: [] };
   const wanted: Array<{ type: SigningOwnerType; id: string; label: string }> = [];
-  if (cert.technicalResponsibleName && findSigningCert('rt', 'rt')) wanted.push({ type: 'rt', id: 'rt', label: cert.technicalResponsibleName });
+  const includeRt = options.includeTechnicalResponsible !== false;
+  if (includeRt && cert.technicalResponsibleName && findSigningCert('rt', 'rt')) wanted.push({ type: 'rt', id: 'rt', label: cert.technicalResponsibleName });
   const instructors = getInstructors();
-  cert.instructorIds.forEach((id, i) => {
+  cert.instructorIds.slice(0, options.maxInstructors ?? cert.instructorIds.length).forEach((id, i) => {
     if (findSigningCert('instructor', id)) wanted.push({ type: 'instructor', id, label: cert.instructorNames[i] || instructors.find(x => x.id === id)?.name || 'Instrutor' });
   });
   if (!wanted.length) return plan;

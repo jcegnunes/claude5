@@ -48,6 +48,15 @@ export function isParticipantApproved(p: TrainingParticipant, course: Pick<Train
   return true;
 }
 
+/**
+ * Aprovação na turma: a tela da turma não tem campo de nota, então a nota só
+ * conta quando foi informada (ex.: planilha importada); senão vale a presença.
+ */
+export function isApprovedInClass(p: TrainingParticipant, course: Pick<TrainingCourse, 'minAttendance' | 'minGrade'>): boolean {
+  const gradeGiven = p.grade !== undefined && p.grade !== null && Number.isFinite(Number(p.grade));
+  return isParticipantApproved(p, { minAttendance: course.minAttendance, minGrade: gradeGiven ? course.minGrade : undefined });
+}
+
 /** Soma ano/mês sem pular para o mês seguinte (31/01 + 1 mês = 28/02). */
 export function addMonths(isoDate: string, months: number): string {
   const [y, m, d] = isoDate.split('-').map(Number);

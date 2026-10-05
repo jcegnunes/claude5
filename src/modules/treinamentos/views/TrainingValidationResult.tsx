@@ -4,10 +4,9 @@
  * com o CPF mascarado. Logado na empresa emissora: usa o dado do aparelho.
  */
 import React, { useEffect, useState } from 'react';
-import { ShieldCheck, ShieldAlert, AlertTriangle, Loader2, Download, GraduationCap } from 'lucide-react';
+import { ShieldCheck, ShieldAlert, AlertTriangle, Loader2, GraduationCap } from 'lucide-react';
 import { getCertificates } from '../repository';
 import { fetchPublicTrainingCertificate } from '../sync';
-import { exportTrainingCertificates } from '../certificatePdf';
 import { certificateSituation, formatDateBr, formatHours, maskCpf } from '../rules';
 import type { PublicTrainingCertificate, TrainingCertificate } from '../types';
 
@@ -24,14 +23,11 @@ function fromLocal(c: TrainingCertificate): PublicTrainingCertificate {
 export const TrainingValidationResult: React.FC<{ code: string }> = ({ code }) => {
   const [loading, setLoading] = useState(true);
   const [cert, setCert] = useState<PublicTrainingCertificate | null>(null);
-  const [local, setLocal] = useState<TrainingCertificate | null>(null);
-  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     let alive = true;
     const clean = code.trim().toUpperCase();
     const mine = getCertificates().find(c => c.validationCode === clean) || null;
-    setLocal(mine);
     setLoading(true);
     (async () => {
       const remote = typeof navigator !== 'undefined' && navigator.onLine !== false ? await fetchPublicTrainingCertificate(clean) : null;
@@ -99,18 +95,6 @@ export const TrainingValidationResult: React.FC<{ code: string }> = ({ code }) =
           </div>
         ))}
       </dl>
-      {local && (
-        <div className="px-6 pb-6">
-          <button
-            type="button"
-            disabled={downloading}
-            onClick={async () => { setDownloading(true); try { await exportTrainingCertificates([local]); } catch (err) { window.alert(err instanceof Error ? err.message : String(err)); } finally { setDownloading(false); } }}
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl"
-          >
-            {downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} Baixar certificado (PDF)
-          </button>
-        </div>
-      )}
     </div>
   );
 };

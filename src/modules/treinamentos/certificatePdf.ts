@@ -13,12 +13,10 @@ import { DielectricStorageService } from '../../services/syncEngine';
 import type { CompanyLabInfo } from '../../types';
 import { formatCpf, formatDateBr, formatHours, totalTopicHours, onlyDigits } from './rules';
 import type { TrainingCertificate, TrainingClass, TrainingInstructor } from './types';
+import { fillTemplate, getTrainingLayout, hexToRgb, type TrainingCertificateLayout } from './layout';
 
-const NAVY: [number, number, number] = [10, 37, 64];
-const ORANGE: [number, number, number] = [234, 88, 12];
-const GRAY: [number, number, number] = [90, 100, 115];
-
-const MODALITY: Record<string, string> = { presencial: 'presencial', ead: 'a distância (EAD)', semipresencial: 'semipresencial' };
+type Rgb = [number, number, number];
+const GRAY: Rgb = [90, 100, 115];
 
 function imageFormat(dataUrl: string): 'PNG' | 'JPEG' {
   return /^data:image\/jpe?g/i.test(dataUrl) ? 'JPEG' : 'PNG';
@@ -41,11 +39,6 @@ function longDate(iso: string): string {
   return Number.isNaN(d.getTime()) ? formatDateBr(iso) : d.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-function period(cert: Pick<TrainingCertificate, 'startDate' | 'endDate'>): string {
-  if (!cert.endDate || cert.startDate === cert.endDate) return `em ${formatDateBr(cert.startDate)}`;
-  return `no período de ${formatDateBr(cert.startDate)} a ${formatDateBr(cert.endDate)}`;
-}
-
 function cityOf(company: CompanyLabInfo): string {
   return company.city || (company.cityState || '').split(/[-/]/)[0].trim();
 }
@@ -55,38 +48,61 @@ function formatCnpj(v: string): string {
   return d.length === 14 ? `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}` : v;
 }
 
-interface Assets { logo: string; }
+interface Assets { logo: string; layout: TrainingCertificateLayout; navy: Rgb; orange: Rgb; }
 
-async function loadAssets(company: CompanyLabInfo): Promise<Assets> {
-  return { logo: await safeImage(company.logoUrl) };
+async function loadAssets(company: CompanyLabInfo, layout: TrainingCertificateLayout = getTrainingLayout()): Promise<Assets> {
+  const src = layout.logoSource === 'nenhum' ? '' : layout.logoSource === 'personalizado' ? (layout.customLogo || company.logoUrl) : company.logoUrl;
+  return { logo: await safeImage(src), layout, navy: hexToRgb(layout.primaryColor), orange: hexToRgb(layout.accentColor) };
 }
 
-function drawFrame(doc: jsPDF, w: number, h: number) {
-  doc.setDrawColor(...NAVY);
+function drawFrame(doc: jsPDF, w: number, h: number, a: Assets) {
+  if (!a.layout.showFrame) return;
+  doc.setDrawColor(...a.navy);
   doc.setLineWidth(1.6);
   doc.rect(7, 7, w - 14, h - 14);
-  doc.setDrawColor(...ORANGE);
+  doc.setDrawColor(...a.orange);
   doc.setLineWidth(0.5);
   doc.rect(10, 10, w - 20, h - 20);
 }
 
+/** Logo (proporção mantida) e dados da empresa, conforme a posição escolhida no layout. */
 function drawHeader(doc: jsPDF, company: CompanyLabInfo, assets: Assets, w: number) {
+  const { layout } = assets;
+  const pos = layout.logoPosition;
   if (assets.logo) {
-    try { doc.addImage(assets.logo, imageFormat(assets.logo), 16, 15, 34, 22, undefined, 'FAST'); } catch { /* logo inválido */ }
+    try {
+      const props = doc.getImageProperties(assets.logo);
+      const ratio = props.height / props.width || 0.65;
+      let lw = layout.logoWidth;
+      let lh = lw * ratio;
+      if (lh > 24) { lh = 24; lw = lh / ratio; }
+      const x = pos === 'centro' ? (w - lw) / 2 : pos === 'direita' ? w - 16 - lw : 16;
+      doc.addImage(assets.logo, imageFormat(assets.logo), x, 14, lw, lh, undefined, 'FAST');
+    } catch { /* logo inválido */ }
   }
-  doc.setTextColor(...NAVY);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.text(company.legalName || company.name || '', w - 16, 20, { align: 'right' });
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(...GRAY);
-  const lines = [
-    company.cnpj ? `CNPJ ${formatCnpj(company.cnpj)}` : '',
-    [company.phone, company.email].filter(Boolean).join(' · '),
-    company.website || ''
-  ].filter(Boolean);
-  lines.forEach((l, i) => doc.text(l, w - 16, 25 + i * 4, { align: 'right' }));
+  if (!layout.showCompanyData) return;
+  const name = company.legalName || company.name || '';
+  const cnpj = company.cnpj ? `CNPJ ${formatCnpj(company.cnpj)}` : '';
+  const contact = [[company.phone, company.email].filter(Boolean).join(' · '), company.website || ''].filter(Boolean);
+  const block = (lines: string[], x: number, align: 'left' | 'right', bold: boolean) => {
+    lines.forEach((l, i) => {
+      const first = bold && i === 0;
+      doc.setFont('helvetica', first ? 'bold' : 'normal');
+      doc.setFontSize(first ? 11 : 8);
+      if (first) doc.setTextColor(...assets.navy); else doc.setTextColor(...GRAY);
+      doc.text(l, x, first ? 20 : 21 + i * 4, { align, maxWidth: pos === 'centro' ? w / 2 - 50 : w - 80 });
+    });
+  };
+  if (pos === 'centro') {
+    // logo no meio: empresa à esquerda e contatos à direita
+    block([name, cnpj].filter(Boolean), 16, 'left', true);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(...GRAY);
+    contact.forEach((l, i) => doc.text(l, w - 16, 20 + i * 4, { align: 'right', maxWidth: w / 2 - 50 }));
+  } else {
+    block([name, cnpj, ...contact].filter(Boolean), pos === 'direita' ? 16 : w - 16, pos === 'direita' ? 'left' : 'right', true);
+  }
 }
 
 export interface DigitalStamp { cn: string; dn: string; reason: string; location: string; at: Date }
@@ -178,7 +194,7 @@ function drawDigitalStamp(doc: jsPDF, cx: number, lineY: number, width: number, 
   all.forEach(l => { doc.text(l, rightX, ry); ry += rlh; });
 }
 
-function drawSignature(doc: jsPDF, x: number, y: number, width: number, image: string, name: string, line2: string, line3?: string, stamp?: DigitalStamp, line4?: string) {
+function drawSignature(doc: jsPDF, navy: Rgb, x: number, y: number, width: number, image: string, name: string, line2: string, line3?: string, stamp?: DigitalStamp, line4?: string) {
   if (stamp) {
     drawDigitalStamp(doc, x + width / 2, y, width, stamp);
   } else if (image) {
@@ -187,7 +203,7 @@ function drawSignature(doc: jsPDF, x: number, y: number, width: number, image: s
   doc.setDrawColor(...GRAY);
   doc.setLineWidth(0.3);
   doc.line(x + 4, y, x + width - 4, y);
-  doc.setTextColor(...NAVY);
+  doc.setTextColor(...navy);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8.5);
   doc.text(doc.splitTextToSize(name || ' ', width - 4)[0], x + width / 2, y + 4, { align: 'center' });
@@ -207,26 +223,36 @@ async function drawCertificate(
   doc: jsPDF, cert: TrainingCertificate, company: CompanyLabInfo, assets: Assets,
   stamps: Record<string, { cn: string; dn: string; reason: string; person?: string; docLine?: string }> = {}, signedAt: Date = new Date()
 ) {
+  const L = assets.layout;
+  const NAVY = assets.navy;
+  const ORANGE = assets.orange;
   const stampLocation = [company.city, company.state].filter(Boolean).join('/') || cityOf(company) || 'Brasil';
   const digitalNames = Object.entries(stamps).map(([label, st]) => st.person || label);
+  const digitalLine = digitalNames.length
+    ? `Documento assinado digitalmente (ICP-Brasil) por ${digitalNames.join(' e ')}. Confira no leitor de PDF ou em validar.iti.gov.br`
+    : '';
   const w = doc.internal.pageSize.getWidth();
   const h = doc.internal.pageSize.getHeight();
-  drawFrame(doc, w, h);
+  drawFrame(doc, w, h, assets);
   drawHeader(doc, company, assets, w);
 
   // ---------------------------------------------------------------- frente
   doc.setTextColor(...NAVY);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(34);
-  doc.text('CERTIFICADO', w / 2, 52, { align: 'center' });
-  doc.setFontSize(12);
-  doc.setTextColor(...ORANGE);
-  doc.text('DE CONCLUSÃO DE TREINAMENTO', w / 2, 60, { align: 'center', charSpace: 1 });
+  if (L.title) {
+    doc.setFontSize(34);
+    doc.text(L.title, w / 2, 52, { align: 'center', maxWidth: w - 40 });
+  }
+  if (L.subtitle) {
+    doc.setFontSize(12);
+    doc.setTextColor(...ORANGE);
+    doc.text(L.subtitle, w / 2, 60, { align: 'center', charSpace: 1, maxWidth: w - 40 });
+  }
 
   doc.setTextColor(40, 40, 40);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(12);
-  doc.text('Certificamos que', w / 2, 74, { align: 'center' });
+  if (L.intro) doc.text(L.intro, w / 2, 74, { align: 'center', maxWidth: w - 50 });
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(22);
   doc.setTextColor(...NAVY);
@@ -234,21 +260,28 @@ async function drawCertificate(
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
   doc.setTextColor(...GRAY);
-  const idLine = [
-    cert.participantCpf ? `CPF ${formatCpf(cert.participantCpf)}` : '',
-    cert.participantRole ? `Função: ${cert.participantRole}` : '',
-    cert.participantCompany ? `Empresa: ${cert.participantCompany}` : ''
-  ].filter(Boolean).join('   ·   ');
-  doc.text(idLine, w / 2, 92, { align: 'center', maxWidth: w - 50 });
+  if (L.showIdLine) {
+    const idLine = [
+      cert.participantCpf ? `CPF ${formatCpf(cert.participantCpf)}` : '',
+      cert.participantRole ? `Função: ${cert.participantRole}` : '',
+      cert.participantCompany ? `Empresa: ${cert.participantCompany}` : ''
+    ].filter(Boolean).join('   ·   ');
+    doc.text(idLine, w / 2, 92, { align: 'center', maxWidth: w - 50 });
+  }
 
-  const body = `concluiu com aproveitamento o treinamento "${cert.courseName}", em conformidade com ${cert.normReference || 'a legislação aplicável'}, realizado ${period(cert)}, na modalidade ${MODALITY[cert.modality] || cert.modality}${cert.location ? `, em ${cert.location}` : ''}, com carga horária total de ${formatHours(cert.workloadHours).replace(' h', ' horas')}.`;
   doc.setFontSize(12);
   doc.setTextColor(40, 40, 40);
-  const bodyLines = doc.splitTextToSize(body, w - 70);
+  const bodyLines: string[] = doc.splitTextToSize(fillTemplate(L.bodyTemplate, cert), w - 70);
   doc.text(bodyLines, w / 2, 102, { align: 'center', lineHeightFactor: 1.45 });
   let y = 102 + bodyLines.length * 6.2;
 
-  if (cert.expiryDate) {
+  if (L.closingText.trim()) {
+    doc.setFontSize(10);
+    const closing: string[] = doc.splitTextToSize(fillTemplate(L.closingText, cert), w - 70);
+    doc.text(closing, w / 2, y + 1, { align: 'center', lineHeightFactor: 1.35 });
+    y += closing.length * 4.8;
+  }
+  if (L.showValidity && cert.expiryDate) {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10.5);
     doc.setTextColor(...NAVY);
@@ -263,26 +296,26 @@ async function drawCertificate(
 
   // ------------------------------------------------------------ assinaturas
   const signers: Array<{ image: string; name: string; l2: string; l3?: string }> = [];
-  for (const ins of cert.instructors.slice(0, 2)) {
-    signers.push({ image: await safeImage(ins.signatureUrl, true), name: ins.name, l2: `Instrutor${ins.qualification ? ` – ${ins.qualification}` : ''}`, l3: ins.registration });
+  for (const ins of cert.instructors.slice(0, L.maxInstructors)) {
+    signers.push({ image: await safeImage(ins.signatureUrl, true), name: ins.name, l2: [L.instructorLabel, ins.qualification].filter(Boolean).join(' – '), l3: ins.registration });
   }
-  if (cert.technicalResponsibleName) {
+  if (L.showTechnicalResponsible && cert.technicalResponsibleName) {
     signers.push({
       image: await safeImage(cert.technicalResponsibleSignature, true),
       name: cert.technicalResponsibleName,
-      l2: `Responsável Técnico${cert.technicalResponsibleTitle ? ` – ${cert.technicalResponsibleTitle}` : ''}`,
+      l2: [L.technicalResponsibleLabel, cert.technicalResponsibleTitle].filter(Boolean).join(' – '),
       l3: cert.technicalResponsibleRegistration
     });
   }
-  signers.push({ image: '', name: cert.participantName, l2: 'Participante' });
+  if (L.showParticipant) signers.push({ image: '', name: cert.participantName, l2: L.participantLabel });
   const sigY = 170;
   const areaX = 18;
   const areaW = w - 18 - 60; // à direita fica o QR Code
-  const colW = areaW / signers.length;
+  const colW = signers.length ? areaW / signers.length : areaW;
   signers.forEach((s, i) => {
     const st = stamps[s.name];
     // assinado digitalmente: nome e documento conforme o certificado cadastrado
-    drawSignature(doc, areaX + i * colW, sigY, colW, s.image, st?.person || s.name, s.l2, s.l3,
+    drawSignature(doc, NAVY, areaX + i * colW, sigY, colW, s.image, st?.person || s.name, s.l2, s.l3,
       st ? { cn: st.cn, dn: st.dn, reason: st.reason, location: stampLocation, at: signedAt } : undefined,
       st?.docLine);
   });
@@ -303,17 +336,23 @@ async function drawCertificate(
   doc.setTextColor(...GRAY);
   doc.text(`Certificado nº ${cert.certificateNumber}${cert.classNumber ? `  ·  Turma ${cert.classNumber}` : ''}  ·  Emitido em ${formatDateBr(cert.issueDate)}`, 16, h - 14);
   doc.text(url, w - 16, h - 14, { align: 'right', maxWidth: 140 });
+  if (digitalLine && !L.showBackPage) {
+    // sem verso: o aviso da assinatura digital vai na frente
+    doc.setTextColor(5, 120, 85);
+    doc.text(digitalLine, 16, h - 18, { maxWidth: w - 80 });
+  }
 
   if (cert.status === 'cancelado') drawCancelled(doc, w, h);
+  if (!L.showBackPage) return;
 
   // ------------------------------------------------------------------ verso
   doc.addPage();
-  drawFrame(doc, w, h);
+  drawFrame(doc, w, h, assets);
   drawHeader(doc, company, assets, w);
   doc.setTextColor(...NAVY);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(15);
-  doc.text('CONTEÚDO PROGRAMÁTICO', w / 2, 46, { align: 'center' });
+  doc.text(L.backTitle || 'CONTEÚDO PROGRAMÁTICO', w / 2, 46, { align: 'center' });
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(40, 40, 40);
@@ -345,7 +384,7 @@ async function drawCertificate(
     ['Participante', `${cert.participantName}${cert.participantCpf ? ` – CPF ${formatCpf(cert.participantCpf)}` : ''}`],
     ['Período / local', `${formatDateBr(cert.startDate)}${cert.endDate && cert.endDate !== cert.startDate ? ` a ${formatDateBr(cert.endDate)}` : ''}${cert.location ? ` – ${cert.location}` : ''}`],
     ['Instrutor(es)', cert.instructors.map(i => [i.name, i.qualification, i.registration].filter(Boolean).join(', ')).join('; ')],
-    ['Aproveitamento', [cert.attendance !== undefined ? `presença ${cert.attendance}%` : '', cert.grade !== undefined && cert.grade !== null ? `nota ${String(cert.grade).replace('.', ',')}` : ''].filter(Boolean).join(' · ')]
+    ['Aproveitamento', !L.showPerformance ? '' : [cert.attendance !== undefined ? `presença ${cert.attendance}%` : '', cert.grade !== undefined && cert.grade !== null ? `nota ${String(cert.grade).replace('.', ',')}` : ''].filter(Boolean).join(' · ')]
   ];
   const right: Array<[string, string]> = [
     ['Pré-requisito', cert.prerequisite || ''],
@@ -372,9 +411,9 @@ async function drawCertificate(
   doc.setFontSize(7.5);
   doc.setTextColor(...GRAY);
   doc.text(`Certificado nº ${cert.certificateNumber}  ·  Código de validação ${cert.validationCode}`, w / 2, h - 14, { align: 'center' });
-  if (digitalNames.length) {
+  if (digitalLine) {
     doc.setTextColor(5, 120, 85);
-    doc.text(`Documento assinado digitalmente (ICP-Brasil) por ${digitalNames.join(' e ')}. Confira no leitor de PDF ou em validar.iti.gov.br`, w / 2, h - 18, { align: 'center', maxWidth: w - 40 });
+    doc.text(digitalLine, w / 2, h - 18, { align: 'center', maxWidth: w - 40 });
   }
   if (cert.status === 'cancelado') drawCancelled(doc, w, h);
 }
@@ -395,10 +434,12 @@ export function certificateFileName(cert: TrainingCertificate): string {
   return `Certificado_${cert.certificateNumber}_${name}.pdf`;
 }
 
-/** Gera um PDF com um ou vários certificados (2 páginas cada). */
-export async function renderTrainingCertificates(certs: TrainingCertificate[], company: CompanyLabInfo = DielectricStorageService.getCompanyInfo()): Promise<jsPDF> {
+/** Gera um PDF com um ou vários certificados (frente e verso cada). */
+export async function renderTrainingCertificates(
+  certs: TrainingCertificate[], company: CompanyLabInfo = DielectricStorageService.getCompanyInfo(), layout?: TrainingCertificateLayout
+): Promise<jsPDF> {
   const doc = newCertificateDoc();
-  const assets = await loadAssets(company);
+  const assets = await loadAssets(company, layout);
   for (let i = 0; i < certs.length; i++) {
     if (i > 0) doc.addPage();
     await drawCertificate(doc, certs[i], company, assets);
@@ -426,11 +467,13 @@ export async function exportTrainingCertificates(certs: TrainingCertificate[], f
 
   const company = DielectricStorageService.getCompanyInfo();
   const assets = await loadAssets(company);
+  // só assina digitalmente quem aparece no certificado (layout)
+  const signOptions = { includeTechnicalResponsible: assets.layout.showTechnicalResponsible, maxInstructors: assets.layout.maxInstructors };
   const files: Array<{ name: string; bytes: Uint8Array }> = [];
   const warnings = new Set<string>();
   let signedCount = 0;
   for (const cert of certs) {
-    const plan = cert.status === 'cancelado' ? { signers: [], names: [], stamps: {}, warnings: [] } : await signing.planSignatures(cert);
+    const plan = cert.status === 'cancelado' ? { signers: [], names: [], stamps: {}, warnings: [] } : await signing.planSignatures(cert, signOptions);
     plan.warnings.forEach(w => warnings.add(w));
     const doc = newCertificateDoc();
     const location = [company.city, company.state].filter(Boolean).join('/') || 'Brasil';
@@ -481,7 +524,7 @@ export async function exportAttendanceList(turma: TrainingClass, instructors: Tr
   const w = doc.internal.pageSize.getWidth();
   const assets = await loadAssets(company);
   drawHeader(doc, company, assets, w);
-  doc.setTextColor(...NAVY);
+  doc.setTextColor(...assets.navy);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(15);
   doc.text('LISTA DE PRESENÇA', 16, 46);
@@ -514,7 +557,7 @@ export async function exportAttendanceList(turma: TrainingClass, instructors: Tr
     head: [['Nº', 'Nome', 'CPF', 'Empresa / Função', ...signCols]],
     body: rows,
     styles: { fontSize: 8, cellPadding: 2, minCellHeight: 9, valign: 'middle', lineColor: [200, 205, 212], lineWidth: 0.2 },
-    headStyles: { fillColor: NAVY, textColor: 255, fontSize: 7.5 },
+    headStyles: { fillColor: assets.navy, textColor: 255, fontSize: 7.5 },
     columnStyles: { 0: { cellWidth: 9, halign: 'center' }, 2: { cellWidth: 28 } }
   });
 
@@ -524,7 +567,7 @@ export async function exportAttendanceList(turma: TrainingClass, instructors: Tr
   const colW = (w - 32) / Math.max(1, ins.length || 1);
   for (let i = 0; i < Math.max(1, ins.length); i++) {
     const it = ins[i];
-    drawSignature(doc, 16 + i * colW, y, colW, await safeImage(it?.signatureUrl, true), it?.name || 'Instrutor', it ? `Instrutor${it.qualification ? ` – ${it.qualification}` : ''}` : '', it?.registration);
+    drawSignature(doc, assets.navy, 16 + i * colW, y, colW, await safeImage(it?.signatureUrl, true), it?.name || 'Instrutor', it ? `Instrutor${it.qualification ? ` – ${it.qualification}` : ''}` : '', it?.registration);
   }
   const name = `Lista_Presenca_${turma.classNumber}.pdf`;
   await saveDocLocally(doc, name, name.replace(/\.pdf$/, ''), 'outro');

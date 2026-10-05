@@ -90,3 +90,16 @@ describe('Treinamentos — cursos padrão', () => {
     expect(DEFAULT_COURSES.find(c => c.key === 'nr35')!.workloadHours).toBe(8);
   });
 });
+
+describe('Treinamentos — aprovação na turma (sem campo de nota)', () => {
+  it('sem nota informada vale a presença; nota informada (planilha) continua valendo', async () => {
+    const { isApprovedInClass } = await import('../rules');
+    const course = { minAttendance: 100, minGrade: 7 };
+    const p = { id: 'a', name: 'Ana', cpf: '', attendance: 100 };
+    expect(isApprovedInClass(p, course)).toBe(true);
+    expect(isApprovedInClass({ ...p, attendance: 90 }, course)).toBe(false);
+    expect(isApprovedInClass({ ...p, grade: 5 }, course)).toBe(false);
+    expect(isApprovedInClass({ ...p, grade: 8 }, course)).toBe(true);
+    expect(isApprovedInClass({ ...p, approvedOverride: false }, course)).toBe(false);
+  });
+});

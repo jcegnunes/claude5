@@ -574,6 +574,8 @@ export interface CompanyLabInfo {
   };
   logoUrl?: string;
   certificateEmissionSettings?: CertificateEmissionSettings;
+  /** Layout do certificado de treinamento (modules/treinamentos/layout.ts) */
+  trainingCertificateLayout?: Record<string, unknown>;
 }
 
 export type AppSettings = CompanyLabInfo;

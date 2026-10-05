@@ -17,7 +17,7 @@ import type { ImportGroup } from './spreadsheetImport';
 import { normalizeText } from './spreadsheetImport';
 import {
   CERTIFICATE_PREFIX, CLASS_PREFIX, computeExpiryDate, generateTrainingValidationCode,
-  isParticipantApproved, newId, todayIso
+  isApprovedInClass, newId, todayIso
 } from './rules';
 import type {
   TrainingCertificate, TrainingClass, TrainingConflict, TrainingCourse, TrainingInstructor,
@@ -135,6 +135,19 @@ export const getCourse = (id: string) => getCourses().find(c => c.id === id);
 export const saveCourse = (c: TrainingCourse) => putRecord('training_courses', c);
 export const deleteCourse = (id: string) => removeRecord('training_courses', id);
 
+/** Certificados ainda válidos do curso (os que serão cancelados ao excluí-lo). */
+export const activeCourseCertificates = (courseId: string) =>
+  getCertificates().filter(c => c.courseId === courseId && c.status !== 'cancelado');
+
+/** Exclui o curso e cancela todos os certificados dele (o validador mostra CANCELADO). */
+export function deleteCourseAndCancelCertificates(courseId: string, reason: string): TrainingCertificate[] {
+  const cancelled = activeCourseCertificates(courseId)
+    .map(c => cancelCertificate(c.id, reason))
+    .filter((c): c is TrainingCertificate => !!c);
+  deleteCourse(courseId);
+  return cancelled;
+}
+
 /** Cadastra os cursos padrão na primeira abertura do módulo (por empresa). */
 export function ensureDefaultCourses(): number {
   const company = currentCompanyId();
@@ -172,6 +185,25 @@ export const getClasses = () => listOf<TrainingClass>('training_classes').sort((
 export const getClass = (id: string) => getClasses().find(c => c.id === id);
 export const saveClass = (c: TrainingClass) => putRecord('training_classes', { ...c, classNumber: c.classNumber || nextTrainingNumber('class') });
 export const deleteClass = (id: string) => removeRecord('training_classes', id);
+
+/** Certificados ainda válidos emitidos pela turma (os que serão cancelados ao excluí-la). */
+export const activeClassCertificates = (classId: string) =>
+  getCertificates().filter(c => c.classId === classId && c.status !== 'cancelado');
+
+/**
+ * Exclui a turma e cancela todos os certificados dela: os certificados ficam
+ * guardados (número e QR Code continuam existindo) e o validador mostra CANCELADO.
+ */
+export function deleteClassAndCancelCertificates(classId: string, reason?: string): TrainingCertificate[] {
+  const turma = getClass(classId);
+  if (!turma) return [];
+  const motivo = (reason || '').trim() || `Turma ${turma.classNumber} excluída`;
+  const cancelled = activeClassCertificates(classId)
+    .map(c => cancelCertificate(c.id, motivo))
+    .filter((c): c is TrainingCertificate => !!c);
+  deleteClass(classId);
+  return cancelled;
+}
 
 // ---------------------------------------------------------------- certificados
 export const getCertificates = () => listOf<TrainingCertificate>('training_certificates').sort((a, b) => (b.issueDate || '').localeCompare(a.issueDate || '') || b.certificateNumber.localeCompare(a.certificateNumber));
@@ -261,7 +293,7 @@ export function issueCertificatesForClass(classId: string): TrainingCertificate[
   const created: TrainingCertificate[] = [];
   const participants = turma.participants.map(p => {
     if (p.certificateId && getCertificate(p.certificateId)) return p;
-    if (!isParticipantApproved(p, course)) return p;
+    if (!isApprovedInClass(p, course)) return p;
     const cert = saveCertificate(buildCertificate(course, {
       participant: p, startDate: turma.startDate, endDate: turma.endDate, location: turma.location,
       workloadHours: turma.workloadHours, modality: turma.modality, instructorIds: turma.instructorIds,
@@ -299,7 +331,8 @@ export function issueFromImport(groups: ImportGroup[], createClasses: boolean): 
         workloadHours: g.workloadHours, instructorIds: g.instructorIds, status: 'concluida',
         notes: 'Turma criada pela importação de planilha.',
         participants: g.rows.map(r => ({
-          id: newId('alu'), name: r.name, cpf: r.cpf, role: r.role, company: r.company, attendance: r.attendance, grade: r.grade
+          id: newId('alu'), name: r.name, cpf: r.cpf, role: r.role, company: r.company, attendance: r.attendance, grade: r.grade,
+          approvedOverride: r.approved ? undefined : false
         }))
       });
       classes.push(turma);
