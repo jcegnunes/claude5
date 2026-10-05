@@ -20,7 +20,7 @@ const TABS: Array<{ id: Tab; label: string; icon: React.ElementType }> = [
   { id: 'certificados', label: 'Certificados', icon: Award },
   { id: 'cursos', label: 'Cursos', icon: BookOpen },
   { id: 'instrutores', label: 'Instrutores', icon: UserCheck },
-  { id: 'layout', label: 'Layout do certificado', icon: Palette }
+  { id: 'layout', label: 'Modelo do certificado', icon: Palette }
 ];
 
 /** Tela principal do módulo Treinamentos. */
@@ -86,7 +86,7 @@ export const TrainingModuleView: React.FC = () => {
         </div>
       )}
 
-      <div className="flex gap-1 overflow-x-auto pb-1 -mx-1 px-1">
+      <div className="flex flex-wrap gap-1">
         {TABS.map(t => (
           <button
             key={t.id}

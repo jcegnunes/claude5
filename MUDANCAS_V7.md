@@ -115,7 +115,7 @@ e mostra o aviso para executar o script.
   certificados, edite a turma e escolha outro curso.
 - **Validador**: a tela de validação do certificado de treinamento não mostra mais o botão
   "Baixar certificado (PDF)"; o PDF é baixado só pelo módulo Treinamentos.
-- **Layout do certificado** (nova aba em Treinamentos; administrador ou RT altera):
+- **Modelo do certificado** (aba em Treinamentos; administrador ou RT altera):
   logo (da empresa, próprio do certificado ou nenhum; posição esquerda/centro/direita e
   tamanho, sem distorcer), dados da empresa no cabeçalho, título, subtítulo, frase antes do
   nome, **texto padrão** com campos ({curso}, {norma}, {periodo}, {local}, {carga_horaria},
@@ -124,7 +124,7 @@ e mostra o aviso para executar o script.
   moldura e verso (título e aproveitamento). Pré-visualização do PDF ao lado. Fica nos dados
   da empresa: sincroniza entre aparelhos e entra no backup. A assinatura digital ICP-Brasil é
   aplicada só para quem aparece no certificado. O padrão reproduz o certificado anterior.
-- **Importar modelo do certificado** (Layout do certificado → Modelo): arte em **PDF, JPG ou
+- **Importar modelo do certificado** (Treinamentos → aba Modelo do certificado → Importar modelo): arte em **PDF, JPG ou
   PNG** usada como fundo da página; o sistema escreve por cima nome, texto, assinaturas e QR
   Code. PDF com 2 páginas: 1ª = frente, 2ª = verso (dá para trocar cada uma). Ajustes de
   posição dos textos e das assinaturas para encaixar na arte. Ao importar, oferece desligar a

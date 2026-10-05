@@ -255,7 +255,12 @@ async function drawCertificate(
   if (L.subtitle) {
     doc.setFontSize(12);
     doc.setTextColor(...ORANGE);
-    doc.text(L.subtitle, w / 2, 60 + dy, { align: 'center', charSpace: 1, maxWidth: w - 40 });
+    // o jsPDF não conta o espaçamento entre letras ao centralizar: calcula o início
+    const lines: string[] = doc.splitTextToSize(L.subtitle, w - 60);
+    lines.forEach((line, i) => {
+      const width = doc.getTextWidth(line) + Math.max(0, line.length - 1);
+      doc.text(line, (w - width) / 2, 60 + dy + i * 5.5, { charSpace: 1 });
+    });
   }
 
   doc.setTextColor(40, 40, 40);
