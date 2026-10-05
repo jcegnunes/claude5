@@ -3,7 +3,7 @@
  * assinaturas, cores e verso, com pré-visualização do PDF.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Image as ImageIcon, Type, PenLine, Palette, FileText, RotateCcw, Save, Loader2, Eye } from 'lucide-react';
+import { Image as ImageIcon, Type, PenLine, Palette, FileText, RotateCcw, Save, Loader2, Eye, FileUp } from 'lucide-react';
 import { DielectricStorageService } from '../../../services/syncEngine';
 import {
   DEFAULT_LAYOUT, TEMPLATE_FIELDS, getTrainingLayout, normalizeLayout, saveTrainingLayout, type TrainingCertificateLayout
@@ -91,6 +91,7 @@ export const LayoutPanel: React.FC = () => {
   const [savedJson, setSavedJson] = useState(JSON.stringify(saved));
   const [previewUrl, setPreviewUrl] = useState('');
   const [rendering, setRendering] = useState(false);
+  const [importing, setImporting] = useState(false);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
   const urlRef = useRef('');
   const companyLogo = DielectricStorageService.getCompanyInfo().logoUrl || '';
@@ -137,6 +138,34 @@ export const LayoutPanel: React.FC = () => {
     try { set({ customLogo: await readLogo(file), logoSource: 'personalizado' }); } catch (err) { alertError(err, 'Logo não carregado'); }
   };
 
+  const handleTemplate = async (file: File | undefined, target: 'ambos' | 'frente' | 'verso') => {
+    if (!file) return;
+    setImporting(true);
+    try {
+      const { importTemplateFile } = await import('../templateImport');
+      const t = await importTemplateFile(file);
+      const patch: Partial<TrainingCertificateLayout> =
+        target === 'frente' ? { frontBackground: t.front }
+          : target === 'verso' ? { backBackground: t.front }
+            : { frontBackground: t.front, ...(t.back ? { backBackground: t.back } : {}) };
+      // o modelo costuma ter moldura e logo próprios
+      if (!L.frontBackground && !L.backBackground && (L.showFrame || L.logoSource !== 'nenhum' || L.showCompanyData)
+        && window.confirm('Desligar a moldura, o logo e os dados da empresa do sistema? (o modelo importado normalmente já tem)')) {
+        Object.assign(patch, { showFrame: false, logoSource: 'nenhum', showCompanyData: false });
+      }
+      set(patch);
+      const notes = [
+        t.portrait ? 'O modelo está em pé (retrato); o certificado é A4 deitado, então a imagem foi esticada. Prefira um modelo deitado (paisagem).' : '',
+        target === 'ambos' && t.back ? 'A 2ª página do PDF foi usada como verso.' : ''
+      ].filter(Boolean);
+      if (notes.length) window.alert(notes.join('\n\n'));
+    } catch (err) {
+      alertError(err, 'Modelo não importado');
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const handleSave = () => {
     try {
       const clean = normalizeLayout(L);
@@ -173,6 +202,54 @@ export const LayoutPanel: React.FC = () => {
 
       <div className="grid lg:grid-cols-2 gap-3 items-start">
         <div className="space-y-3">
+          <Section icon={FileUp} title="Modelo do certificado (fundo)">
+            <p className="text-[11px] text-slate-500">
+              Importe a arte do certificado em <b>PDF, JPG ou PNG</b> (A4 deitado). Ela vira o fundo da página e o sistema escreve por
+              cima o nome, o texto, as assinaturas e o QR Code. PDF com 2 páginas: a 1ª é a frente e a 2ª o verso.
+            </p>
+            {canEdit && (
+              <div className="flex flex-wrap items-center gap-2">
+                <label className={`${btnPrimary} cursor-pointer ${importing ? 'opacity-50 pointer-events-none' : ''}`}>
+                  {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileUp className="w-3.5 h-3.5" />} Importar modelo
+                  <input type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" className="hidden" onChange={e => { handleTemplate(e.target.files?.[0], 'ambos'); e.target.value = ''; }} />
+                </label>
+                <span className="text-[10px] text-slate-400">PDF, JPG ou PNG · até 25 MB</span>
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-3">
+              {(['frente', 'verso'] as const).map(side => {
+                const img = side === 'frente' ? L.frontBackground : L.backBackground;
+                return (
+                  <div key={side} className="space-y-1">
+                    <span className="block font-bold text-slate-700 text-xs capitalize">{side}</span>
+                    <div className="aspect-[297/210] border border-slate-200 rounded-lg bg-slate-50 flex items-center justify-center overflow-hidden">
+                      {img ? <img src={img} alt={`Fundo da ${side}`} className="w-full h-full object-fill" /> : <span className="text-[10px] text-slate-400">sem modelo</span>}
+                    </div>
+                    {canEdit && (
+                      <div className="flex flex-wrap gap-x-3 gap-y-1">
+                        <label className={`text-[11px] text-blue-600 hover:underline cursor-pointer ${importing ? 'pointer-events-none opacity-50' : ''}`}>
+                          {img ? 'Trocar' : 'Importar'}
+                          <input type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" className="hidden" onChange={e => { handleTemplate(e.target.files?.[0], side); e.target.value = ''; }} />
+                        </label>
+                        {img && <button type="button" className="text-[11px] text-red-600 hover:underline" onClick={() => set(side === 'frente' ? { frontBackground: '' } : { backBackground: '' })}>Remover</button>}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {(L.frontBackground || L.backBackground) && (
+              <div className="grid sm:grid-cols-2 gap-3">
+                <Field label={`Posição dos textos: ${L.contentOffsetY > 0 ? '+' : ''}${L.contentOffsetY} mm`} hint="Sobe (−) ou desce (+) do título até a data.">
+                  <input type="range" min={-40} max={40} step={1} disabled={disabled} value={L.contentOffsetY} onChange={e => set({ contentOffsetY: Number(e.target.value) })} className="w-full accent-blue-600" />
+                </Field>
+                <Field label={`Posição das assinaturas: ${L.signatureOffsetY > 0 ? '+' : ''}${L.signatureOffsetY} mm`} hint="Sobe (−) ou desce (+) a linha das assinaturas.">
+                  <input type="range" min={-40} max={15} step={1} disabled={disabled} value={L.signatureOffsetY} onChange={e => set({ signatureOffsetY: Number(e.target.value) })} className="w-full accent-blue-600" />
+                </Field>
+              </div>
+            )}
+          </Section>
+
           <Section icon={ImageIcon} title="Logo e cabeçalho">
             <div className="grid sm:grid-cols-2 gap-3">
               <Field label="Logo">

@@ -11,6 +11,15 @@ export type LogoSource = 'empresa' | 'personalizado' | 'nenhum';
 export type LogoPosition = 'esquerda' | 'centro' | 'direita';
 
 export interface TrainingCertificateLayout {
+  // ------------------------------------------- modelo importado (fundo)
+  /** Fundo da frente (JPEG data URL, importado de PDF/JPG/PNG) */
+  frontBackground: string;
+  /** Fundo do verso */
+  backBackground: string;
+  /** Desloca o bloco de textos (título até a data), em mm */
+  contentOffsetY: number;
+  /** Desloca a linha das assinaturas, em mm */
+  signatureOffsetY: number;
   // ------------------------------------------------------------- logo
   logoSource: LogoSource;
   /** Imagem própria do certificado (data URL), usada com logoSource "personalizado" */
@@ -49,6 +58,10 @@ export const DEFAULT_BODY_TEMPLATE =
   'concluiu com aproveitamento o treinamento "{curso}", em conformidade com {norma}, realizado {periodo}, na modalidade {modalidade}{local}, com carga horária total de {carga_horaria}.';
 
 export const DEFAULT_LAYOUT: TrainingCertificateLayout = {
+  frontBackground: '',
+  backBackground: '',
+  contentOffsetY: 0,
+  signatureOffsetY: 0,
   logoSource: 'empresa',
   customLogo: '',
   logoPosition: 'esquerda',
@@ -110,7 +123,13 @@ export function normalizeLayout(raw?: Partial<TrainingCertificateLayout> | Recor
   const d = DEFAULT_LAYOUT;
   const width = Number(r.logoWidth);
   const maxIns = Number(r.maxInstructors);
+  const image = (v: unknown) => (typeof v === 'string' && /^data:image\/(jpeg|png);base64,/.test(v) ? v : '');
+  const offset = (v: unknown, min: number, max: number) => (Number.isFinite(Number(v)) ? Math.min(max, Math.max(min, Number(v))) : 0);
   return {
+    frontBackground: image(r.frontBackground),
+    backBackground: image(r.backBackground),
+    contentOffsetY: offset(r.contentOffsetY, -40, 40),
+    signatureOffsetY: offset(r.signatureOffsetY, -40, 15),
     logoSource: ['empresa', 'personalizado', 'nenhum'].includes(r.logoSource) ? r.logoSource : d.logoSource,
     customLogo: typeof r.customLogo === 'string' && r.customLogo.startsWith('data:image/') ? r.customLogo : '',
     logoPosition: ['esquerda', 'centro', 'direita'].includes(r.logoPosition) ? r.logoPosition : d.logoPosition,

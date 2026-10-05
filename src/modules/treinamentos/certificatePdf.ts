@@ -55,6 +55,12 @@ async function loadAssets(company: CompanyLabInfo, layout: TrainingCertificateLa
   return { logo: await safeImage(src), layout, navy: hexToRgb(layout.primaryColor), orange: hexToRgb(layout.accentColor) };
 }
 
+/** Modelo importado ocupando a página inteira. */
+function drawBackground(doc: jsPDF, w: number, h: number, image: string) {
+  if (!image) return;
+  try { doc.addImage(image, imageFormat(image), 0, 0, w, h, undefined, 'MEDIUM'); } catch { /* imagem inválida */ }
+}
+
 function drawFrame(doc: jsPDF, w: number, h: number, a: Assets) {
   if (!a.layout.showFrame) return;
   doc.setDrawColor(...a.navy);
@@ -233,30 +239,33 @@ async function drawCertificate(
     : '';
   const w = doc.internal.pageSize.getWidth();
   const h = doc.internal.pageSize.getHeight();
+  drawBackground(doc, w, h, L.frontBackground);
   drawFrame(doc, w, h, assets);
   drawHeader(doc, company, assets, w);
 
   // ---------------------------------------------------------------- frente
+  // dy: ajuste vertical do bloco de textos para encaixar no modelo importado
+  const dy = L.contentOffsetY;
   doc.setTextColor(...NAVY);
   doc.setFont('helvetica', 'bold');
   if (L.title) {
     doc.setFontSize(34);
-    doc.text(L.title, w / 2, 52, { align: 'center', maxWidth: w - 40 });
+    doc.text(L.title, w / 2, 52 + dy, { align: 'center', maxWidth: w - 40 });
   }
   if (L.subtitle) {
     doc.setFontSize(12);
     doc.setTextColor(...ORANGE);
-    doc.text(L.subtitle, w / 2, 60, { align: 'center', charSpace: 1, maxWidth: w - 40 });
+    doc.text(L.subtitle, w / 2, 60 + dy, { align: 'center', charSpace: 1, maxWidth: w - 40 });
   }
 
   doc.setTextColor(40, 40, 40);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(12);
-  if (L.intro) doc.text(L.intro, w / 2, 74, { align: 'center', maxWidth: w - 50 });
+  if (L.intro) doc.text(L.intro, w / 2, 74 + dy, { align: 'center', maxWidth: w - 50 });
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(22);
   doc.setTextColor(...NAVY);
-  doc.text(cert.participantName.toUpperCase(), w / 2, 85, { align: 'center', maxWidth: w - 50 });
+  doc.text(cert.participantName.toUpperCase(), w / 2, 85 + dy, { align: 'center', maxWidth: w - 50 });
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
   doc.setTextColor(...GRAY);
@@ -266,14 +275,14 @@ async function drawCertificate(
       cert.participantRole ? `Função: ${cert.participantRole}` : '',
       cert.participantCompany ? `Empresa: ${cert.participantCompany}` : ''
     ].filter(Boolean).join('   ·   ');
-    doc.text(idLine, w / 2, 92, { align: 'center', maxWidth: w - 50 });
+    doc.text(idLine, w / 2, 92 + dy, { align: 'center', maxWidth: w - 50 });
   }
 
   doc.setFontSize(12);
   doc.setTextColor(40, 40, 40);
   const bodyLines: string[] = doc.splitTextToSize(fillTemplate(L.bodyTemplate, cert), w - 70);
-  doc.text(bodyLines, w / 2, 102, { align: 'center', lineHeightFactor: 1.45 });
-  let y = 102 + bodyLines.length * 6.2;
+  doc.text(bodyLines, w / 2, 102 + dy, { align: 'center', lineHeightFactor: 1.45 });
+  let y = 102 + dy + bodyLines.length * 6.2;
 
   if (L.closingText.trim()) {
     doc.setFontSize(10);
@@ -308,7 +317,7 @@ async function drawCertificate(
     });
   }
   if (L.showParticipant) signers.push({ image: '', name: cert.participantName, l2: L.participantLabel });
-  const sigY = 170;
+  const sigY = 170 + L.signatureOffsetY;
   const areaX = 18;
   const areaW = w - 18 - 60; // à direita fica o QR Code
   const colW = signers.length ? areaW / signers.length : areaW;
@@ -347,6 +356,7 @@ async function drawCertificate(
 
   // ------------------------------------------------------------------ verso
   doc.addPage();
+  drawBackground(doc, w, h, L.backBackground);
   drawFrame(doc, w, h, assets);
   drawHeader(doc, company, assets, w);
   doc.setTextColor(...NAVY);

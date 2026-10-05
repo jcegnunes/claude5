@@ -39,3 +39,13 @@ describe('Treinamentos — layout do certificado', () => {
     expect(hexToRgb('#EA580C')).toEqual([234, 88, 12]);
   });
 });
+
+describe('Treinamentos — modelo importado (fundo)', () => {
+  it('aceita só imagem JPEG/PNG em base64 e limita os ajustes de posição', () => {
+    const n = normalizeLayout({ frontBackground: 'data:image/jpeg;base64,AAAA', backBackground: 'https://x/y.png', contentOffsetY: -99, signatureOffsetY: 99 });
+    expect(n.frontBackground).toBe('data:image/jpeg;base64,AAAA');
+    expect(n.backBackground).toBe('');
+    expect(n.contentOffsetY).toBe(-40);
+    expect(n.signatureOffsetY).toBe(15);
+  });
+});

@@ -124,6 +124,12 @@ e mostra o aviso para executar o script.
   moldura e verso (título e aproveitamento). Pré-visualização do PDF ao lado. Fica nos dados
   da empresa: sincroniza entre aparelhos e entra no backup. A assinatura digital ICP-Brasil é
   aplicada só para quem aparece no certificado. O padrão reproduz o certificado anterior.
+- **Importar modelo do certificado** (Layout do certificado → Modelo): arte em **PDF, JPG ou
+  PNG** usada como fundo da página; o sistema escreve por cima nome, texto, assinaturas e QR
+  Code. PDF com 2 páginas: 1ª = frente, 2ª = verso (dá para trocar cada uma). Ajustes de
+  posição dos textos e das assinaturas para encaixar na arte. Ao importar, oferece desligar a
+  moldura, o logo e os dados da empresa do sistema. Use A4 deitado (paisagem). A imagem é
+  reduzida (~150 dpi, JPEG) e fica no layout da empresa. Nova dependência: `pdfjs-dist`.
 - **Certificados**: emissão individual (sem turma), busca por nome/CPF/número, PDF,
   link de validação, cancelamento com motivo (o validador mostra CANCELADO).
 - **Painel**: emitidos no ano, turmas abertas, vencendo em 60 dias e vencidos sem
