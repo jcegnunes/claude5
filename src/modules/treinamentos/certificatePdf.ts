@@ -13,7 +13,7 @@ import { DielectricStorageService } from '../../services/syncEngine';
 import type { CompanyLabInfo } from '../../types';
 import { formatCpf, formatDateBr, formatHours, totalTopicHours, onlyDigits } from './rules';
 import type { TrainingCertificate, TrainingClass, TrainingInstructor } from './types';
-import { fillTemplate, getTrainingLayout, hexToRgb, type TrainingCertificateLayout } from './layout';
+import { companyHeaderLines, fillTemplate, getTrainingLayout, hexToRgb, type TrainingCertificateLayout } from './layout';
 
 type Rgb = [number, number, number];
 const GRAY: Rgb = [90, 100, 115];
@@ -48,11 +48,11 @@ function formatCnpj(v: string): string {
   return d.length === 14 ? `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}` : v;
 }
 
-interface Assets { logo: string; layout: TrainingCertificateLayout; navy: Rgb; orange: Rgb; }
+interface Assets { logo: string; logo2: string; layout: TrainingCertificateLayout; navy: Rgb; orange: Rgb; }
 
 async function loadAssets(company: CompanyLabInfo, layout: TrainingCertificateLayout = getTrainingLayout()): Promise<Assets> {
   const src = layout.logoSource === 'nenhum' ? '' : layout.logoSource === 'personalizado' ? (layout.customLogo || company.logoUrl) : company.logoUrl;
-  return { logo: await safeImage(src), layout, navy: hexToRgb(layout.primaryColor), orange: hexToRgb(layout.accentColor) };
+  return { logo: await safeImage(src), logo2: await safeImage(layout.logo2Image), layout, navy: hexToRgb(layout.primaryColor), orange: hexToRgb(layout.accentColor) };
 }
 
 /** Modelo importado ocupando a página inteira. */
@@ -143,43 +143,73 @@ function drawFrame(doc: jsPDF, w: number, h: number, a: Assets) {
   }
 }
 
-/** Logo (proporção mantida) e dados da empresa, conforme a posição escolhida no layout. */
-function drawHeader(doc: jsPDF, company: CompanyLabInfo, assets: Assets, w: number) {
+type LogoPos = TrainingCertificateLayout['logoPosition'];
+
+/**
+ * Desenha os logos (proporção mantida, até 24 mm de altura). Logos na mesma
+ * posição ficam lado a lado.
+ */
+function drawLogos(doc: jsPDF, logos: Array<{ image: string; pos: LogoPos; width: number }>, w: number) {
+  (['esquerda', 'centro', 'direita'] as LogoPos[]).forEach(pos => {
+    const sized = logos.filter(l => l.pos === pos).map(l => {
+      try {
+        const props = doc.getImageProperties(l.image);
+        const ratio = props.height / props.width || 0.65;
+        let lw = l.width;
+        let lh = lw * ratio;
+        if (lh > 24) { lh = 24; lw = lh / ratio; }
+        return { ...l, lw, lh };
+      } catch { return null; }
+    }).filter((l): l is NonNullable<typeof l> => !!l);
+    if (!sized.length) return;
+    const gap = 5;
+    const total = sized.reduce((sum, l) => sum + l.lw, 0) + gap * (sized.length - 1);
+    let x = pos === 'esquerda' ? 16 : pos === 'direita' ? w - 16 - total : (w - total) / 2;
+    sized.forEach(l => {
+      try { doc.addImage(l.image, imageFormat(l.image), x, 14, l.lw, l.lh, undefined, 'FAST'); } catch { /* logo inválido */ }
+      x += l.lw + gap;
+    });
+  });
+}
+
+/** Logos e dados da empresa escolhidos, conforme o lado da página e as posições dos logos. */
+function drawHeader(doc: jsPDF, company: CompanyLabInfo, assets: Assets, w: number, side: 'frente' | 'verso' = 'frente') {
   const { layout } = assets;
-  const pos = layout.logoPosition;
-  if (assets.logo) {
-    try {
-      const props = doc.getImageProperties(assets.logo);
-      const ratio = props.height / props.width || 0.65;
-      let lw = layout.logoWidth;
-      let lh = lw * ratio;
-      if (lh > 24) { lh = 24; lw = lh / ratio; }
-      const x = pos === 'centro' ? (w - lw) / 2 : pos === 'direita' ? w - 16 - lw : 16;
-      doc.addImage(assets.logo, imageFormat(assets.logo), x, 14, lw, lh, undefined, 'FAST');
-    } catch { /* logo inválido */ }
-  }
-  if (!layout.showCompanyData) return;
-  const name = company.legalName || company.name || '';
-  const cnpj = company.cnpj ? `CNPJ ${formatCnpj(company.cnpj)}` : '';
-  const contact = [[company.phone, company.email].filter(Boolean).join(' · '), company.website || ''].filter(Boolean);
-  const block = (lines: string[], x: number, align: 'left' | 'right', bold: boolean) => {
+  const front = side === 'frente';
+  const showData = front ? layout.companyDataOnFront : layout.companyDataOnBack;
+  const logos: Array<{ image: string; pos: LogoPos; width: number }> = [];
+  if (assets.logo && (front ? layout.logoOnFront : layout.logoOnBack)) logos.push({ image: assets.logo, pos: layout.logoPosition, width: layout.logoWidth });
+  if (assets.logo2 && (front ? layout.logo2OnFront : layout.logo2OnBack)) logos.push({ image: assets.logo2, pos: layout.logo2Position, width: layout.logo2Width });
+  drawLogos(doc, logos, w);
+  if (!showData) return;
+  const { title, identity, contact } = companyHeaderLines(company, layout.companyFields);
+  const used = new Set(logos.map(l => l.pos));
+  // dados no lado sem logo: direita, senão esquerda; logo só no centro: divide nos dois lados
+  const placement = used.has('centro') && !used.has('esquerda') && !used.has('direita') ? 'dividido'
+    : !used.has('direita') ? 'direita' : !used.has('esquerda') ? 'esquerda' : 'centro';
+  const maxWidth = placement === 'dividido' ? w / 2 - 50 : placement === 'centro' ? w - 2 * (16 + Math.max(...logos.map(l => l.width))) - 10 : w - 80;
+  // até 6 linhas sem invadir o título do certificado
+  const block = (lines: string[], x: number, align: 'left' | 'right' | 'center', withTitle: boolean) => {
+    let y = 20;
+    const step = lines.length > 4 ? 3.4 : 4;
     lines.forEach((l, i) => {
-      const first = bold && i === 0;
-      doc.setFont('helvetica', first ? 'bold' : 'normal');
-      doc.setFontSize(first ? 11 : 8);
-      if (first) doc.setTextColor(...assets.navy); else doc.setTextColor(...GRAY);
-      doc.text(l, x, first ? 20 : 21 + i * 4, { align, maxWidth: pos === 'centro' ? w / 2 - 50 : w - 80 });
+      const bold = withTitle && i === 0;
+      doc.setFont('helvetica', bold ? 'bold' : 'normal');
+      doc.setFontSize(bold ? 11 : lines.length > 4 ? 7.5 : 8);
+      if (bold) doc.setTextColor(...assets.navy); else doc.setTextColor(...GRAY);
+      if (i > 0) y += i === 1 && withTitle ? step + 1 : step;
+      doc.text(l, x, y, { align, maxWidth });
     });
   };
-  if (pos === 'centro') {
+  if (placement === 'dividido') {
     // logo no meio: empresa à esquerda e contatos à direita
-    block([name, cnpj].filter(Boolean), 16, 'left', true);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(...GRAY);
-    contact.forEach((l, i) => doc.text(l, w - 16, 20 + i * 4, { align: 'right', maxWidth: w / 2 - 50 }));
+    block([title, ...identity].filter(Boolean), 16, 'left', !!title);
+    block(contact, w - 16, 'right', false);
+  } else if (placement === 'centro') {
+    // logos nos dois lados: dados no meio, entre eles
+    block([title, ...identity, ...contact].filter(Boolean), w / 2, 'center', !!title);
   } else {
-    block([name, cnpj, ...contact].filter(Boolean), pos === 'direita' ? 16 : w - 16, pos === 'direita' ? 'left' : 'right', true);
+    block([title, ...identity, ...contact].filter(Boolean), placement === 'esquerda' ? 16 : w - 16, placement === 'esquerda' ? 'left' : 'right', !!title);
   }
 }
 
@@ -435,7 +465,7 @@ async function drawCertificate(
   doc.addPage();
   drawBackground(doc, w, h, L.backBackground);
   drawFrame(doc, w, h, assets);
-  drawHeader(doc, company, assets, w);
+  drawHeader(doc, company, assets, w, 'verso');
   doc.setTextColor(...NAVY);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(15);

@@ -6,7 +6,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Image as ImageIcon, Type, PenLine, Palette, FileText, RotateCcw, Save, Loader2, Eye, FileUp, Frame } from 'lucide-react';
 import { DielectricStorageService } from '../../../services/syncEngine';
 import {
-  DEFAULT_LAYOUT, FRAME_STYLES, TEMPLATE_FIELDS, getTrainingLayout, normalizeLayout, saveTrainingLayout, type FrameStyle, type TrainingCertificateLayout
+  COMPANY_FIELDS, DEFAULT_LAYOUT, FRAME_STYLES, companyHeaderLines, TEMPLATE_FIELDS, getTrainingLayout, normalizeLayout, saveTrainingLayout, type CompanyField, type FrameStyle, type TrainingCertificateLayout
 } from '../layout';
 import { getCourses, getInstructors } from '../repository';
 import { canManageSigningCerts } from '../signingCerts';
@@ -123,7 +123,13 @@ export const LayoutPanel: React.FC = () => {
   const [importing, setImporting] = useState(false);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
   const urlRef = useRef('');
-  const companyLogo = DielectricStorageService.getCompanyInfo().logoUrl || '';
+  const companyInfo = DielectricStorageService.getCompanyInfo();
+  const companyLogo = companyInfo.logoUrl || '';
+  /** Texto de um dado da empresa, para mostrar ao lado da opção */
+  const companyFieldValue = (f: CompanyField): string => {
+    const { title, identity, contact } = companyHeaderLines(companyInfo, [f]);
+    return [title, ...identity, ...contact].join(' ');
+  };
   const dirty = JSON.stringify(L) !== savedJson;
 
   const set = (patch: Partial<TrainingCertificateLayout>) => setL(prev => ({ ...prev, ...patch }));
@@ -178,9 +184,9 @@ export const LayoutPanel: React.FC = () => {
           : target === 'verso' ? { backBackground: t.front }
             : { frontBackground: t.front, ...(t.back ? { backBackground: t.back } : {}) };
       // o modelo costuma ter moldura e logo próprios
-      if (!L.frontBackground && !L.backBackground && (L.frameStyle !== 'nenhuma' || L.logoSource !== 'nenhum' || L.showCompanyData)
+      if (!L.frontBackground && !L.backBackground && (L.frameStyle !== 'nenhuma' || L.logoSource !== 'nenhum' || L.companyDataOnFront || L.companyDataOnBack)
         && window.confirm('Desligar a moldura, o logo e os dados da empresa do sistema? (o modelo importado normalmente já tem)')) {
-        Object.assign(patch, { frameStyle: 'nenhuma', logoSource: 'nenhum', showCompanyData: false });
+        Object.assign(patch, { frameStyle: 'nenhuma', logoSource: 'nenhum', companyDataOnFront: false, companyDataOnBack: false });
       }
       set(patch);
       const notes = [
@@ -193,6 +199,11 @@ export const LayoutPanel: React.FC = () => {
     } finally {
       setImporting(false);
     }
+  };
+
+  const handleLogo2 = async (file?: File) => {
+    if (!file) return;
+    try { set({ logo2Image: await readLogo(file) }); } catch (err) { alertError(err, 'Logo não carregado'); }
   };
 
   const handleSave = () => {
@@ -318,7 +329,78 @@ export const LayoutPanel: React.FC = () => {
               </div>
             )}
             {L.logoSource === 'personalizado' && !L.customLogo && <p className="text-[11px] text-amber-700">Sem imagem própria: usa o logo da empresa.</p>}
-            <Toggle label="Mostrar dados da empresa (razão social, CNPJ e contatos)" checked={L.showCompanyData} disabled={disabled} onChange={v => set({ showCompanyData: v })} />
+            <div className="border-t border-slate-100 pt-3 space-y-2">
+              <span className="block font-bold text-slate-700 text-xs">Segundo logo <span className="font-normal text-slate-400">(opcional: parceiro, cliente, acreditação…)</span></span>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="w-28 h-16 border border-slate-200 rounded-lg bg-slate-50 flex items-center justify-center overflow-hidden">
+                  {L.logo2Image ? <img src={L.logo2Image} alt="Segundo logo" className="max-w-full max-h-full object-contain" /> : <span className="text-[10px] text-slate-400">sem imagem</span>}
+                </div>
+                {canEdit && (
+                  <div className="flex flex-col gap-1">
+                    <label className={`${btnSecondary} cursor-pointer`}>
+                      <ImageIcon className="w-3.5 h-3.5" /> {L.logo2Image ? 'Trocar imagem' : 'Escolher imagem'}
+                      <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={e => { handleLogo2(e.target.files?.[0]); e.target.value = ''; }} />
+                    </label>
+                    {L.logo2Image && <button type="button" className="text-[11px] text-red-600 hover:underline text-left" onClick={() => set({ logo2Image: '' })}>Remover</button>}
+                  </div>
+                )}
+                {L.logo2Image && (
+                  <>
+                    <Field label="Posição" className="w-32">
+                      <select className={inputCls} disabled={disabled} value={L.logo2Position} onChange={e => set({ logo2Position: e.target.value as TrainingCertificateLayout['logo2Position'] })}>
+                        <option value="esquerda">Esquerda</option>
+                        <option value="centro">Centro</option>
+                        <option value="direita">Direita</option>
+                      </select>
+                    </Field>
+                    <Field label={`Tamanho: ${Math.round(L.logo2Width)} mm`} className="flex-1 min-w-[140px]">
+                      <input type="range" min={15} max={70} step={1} disabled={disabled} value={L.logo2Width} onChange={e => set({ logo2Width: Number(e.target.value) })} className="w-full accent-blue-600" />
+                    </Field>
+                  </>
+                )}
+              </div>
+              {L.logo2Image && L.logo2Position === L.logoPosition && L.logoSource !== 'nenhum' && (
+                <p className="text-[11px] text-slate-500">Os dois logos estão na mesma posição: ficam lado a lado.</p>
+              )}
+            </div>
+            <div>
+              <span className="block font-bold text-slate-700 text-xs mb-1">Onde aparece</span>
+              <table className="text-xs text-slate-700">
+                <thead>
+                  <tr className="text-[10px] uppercase text-slate-400"><th className="text-left font-bold pr-6 pb-1"></th><th className="px-3 pb-1">Frente</th><th className="px-3 pb-1">Verso</th></tr>
+                </thead>
+                <tbody>
+                  {([['Logo', 'logoOnFront', 'logoOnBack'], ['Segundo logo', 'logo2OnFront', 'logo2OnBack'], ['Dados da empresa', 'companyDataOnFront', 'companyDataOnBack']] as const).map(([label, front, back]) => (
+                    <tr key={label}>
+                      <td className="pr-6 py-1 font-semibold">{label}</td>
+                      {[front, back].map(k => (
+                        <td key={k} className="px-3 py-1 text-center">
+                          <input type="checkbox" className="w-4 h-4 accent-blue-600" aria-label={`${label} – ${k.endsWith('Front') ? 'frente' : 'verso'}`}
+                            disabled={disabled || (label === 'Logo' && L.logoSource === 'nenhum') || (label === 'Segundo logo' && !L.logo2Image)} checked={L[k]} onChange={e => set({ [k]: e.target.checked } as Partial<TrainingCertificateLayout>)} />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {(L.companyDataOnFront || L.companyDataOnBack) && (
+              <div>
+                <span className="block font-bold text-slate-700 text-xs mb-1">Dados da empresa que aparecem</span>
+                <div className="grid sm:grid-cols-2 gap-x-4">
+                  {COMPANY_FIELDS.map(f => {
+                    const value = companyFieldValue(f.id);
+                    return (
+                      <label key={f.id} className="flex items-start gap-2 text-xs text-slate-700 py-1">
+                        <input type="checkbox" className="w-4 h-4 mt-0.5 accent-blue-600" disabled={disabled} checked={L.companyFields.includes(f.id)}
+                          onChange={e => set({ companyFields: e.target.checked ? [...L.companyFields, f.id] : L.companyFields.filter(x => x !== f.id) })} />
+                        <span>{f.label}<span className="block text-[10px] text-slate-400 truncate max-w-[220px]">{value || 'não cadastrado em Configuração'}</span></span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </Section>
 
           <Section icon={Type} title="Textos">

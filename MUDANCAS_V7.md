@@ -134,6 +134,15 @@ e mostra o aviso para executar o script.
   Tracejada, Cantoneiras, Faixa larga e Geométrica — além de "Sem moldura"; uma ou duas
   linhas, com cor e espessura de cada linha (na Faixa larga a espessura é a largura da faixa).
   Layouts já salvos continuam com a moldura dupla de antes.
+- **Logo e dados da empresa por página** (aba Modelo do certificado → Logo e cabeçalho):
+  caixas de seleção para mostrar o logo e os dados da empresa na **frente** e/ou no **verso**,
+  e escolha de **quais dados** aparecem (razão social, nome fantasia, CNPJ, CREA, endereço,
+  telefone, e-mail, site, Instagram). O padrão mostra o mesmo de antes (razão social, CNPJ,
+  telefone, e-mail e site) nos dois lados.
+- **Segundo logo** (Logo e cabeçalho → Segundo logo): imagem própria (parceiro, cliente,
+  acreditação…), posição, tamanho e frente/verso independentes do logo principal. Logos na
+  mesma posição ficam lado a lado; com logos nos dois lados, os dados da empresa vão para o
+  meio do cabeçalho.
 - **Certificados**: emissão individual (sem turma), busca por nome/CPF/número, PDF,
   link de validação, cancelamento com motivo (o validador mostra CANCELADO).
 - **Painel**: emitidos no ano, turmas abertas, vencendo em 60 dias e vencidos sem
