@@ -9,6 +9,18 @@ import type { TrainingCertificate } from './types';
 
 export type LogoSource = 'empresa' | 'personalizado' | 'nenhum';
 export type LogoPosition = 'esquerda' | 'centro' | 'direita';
+export type FrameStyle = 'nenhuma' | 'classica' | 'arredondada' | 'tracejada' | 'cantos' | 'faixa' | 'geometrica';
+
+/** Modelos de moldura oferecidos na tela (a ordem é a da lista). */
+export const FRAME_STYLES: Array<{ id: FrameStyle; label: string; hint: string }> = [
+  { id: 'classica', label: 'Clássica', hint: 'Linhas retas acompanhando a borda' },
+  { id: 'arredondada', label: 'Arredondada', hint: 'Cantos arredondados' },
+  { id: 'tracejada', label: 'Tracejada', hint: 'Linha tracejada' },
+  { id: 'cantos', label: 'Cantoneiras', hint: 'Cantos decorados em L' },
+  { id: 'faixa', label: 'Faixa larga', hint: 'Borda cheia na cor 1' },
+  { id: 'geometrica', label: 'Geométrica', hint: 'Triângulos nos cantos' },
+  { id: 'nenhuma', label: 'Sem moldura', hint: 'Página limpa (bom com modelo importado)' }
+];
 
 export interface TrainingCertificateLayout {
   // ------------------------------------------- modelo importado (fundo)
@@ -31,7 +43,16 @@ export interface TrainingCertificateLayout {
   // ------------------------------------------------------- aparência
   primaryColor: string;
   accentColor: string;
-  showFrame: boolean;
+  // ----------------------------------------------------------- moldura
+  frameStyle: FrameStyle;
+  /** 1 = uma linha; 2 = linha externa + interna */
+  frameLines: number;
+  /** Linha externa (ou única) */
+  frameColor: string;
+  frameWidth: number;
+  /** Linha interna */
+  frameColor2: string;
+  frameWidth2: number;
   // ----------------------------------------------------------- textos
   title: string;
   subtitle: string;
@@ -69,7 +90,12 @@ export const DEFAULT_LAYOUT: TrainingCertificateLayout = {
   showCompanyData: true,
   primaryColor: '#0a2540',
   accentColor: '#ea580c',
-  showFrame: true,
+  frameStyle: 'classica',
+  frameLines: 2,
+  frameColor: '#0a2540',
+  frameWidth: 1.6,
+  frameColor2: '#ea580c',
+  frameWidth2: 0.5,
   title: 'CERTIFICADO',
   subtitle: 'DE CONCLUSÃO DE TREINAMENTO',
   intro: 'Certificamos que',
@@ -137,7 +163,13 @@ export function normalizeLayout(raw?: Partial<TrainingCertificateLayout> | Recor
     showCompanyData: bool(r.showCompanyData, d.showCompanyData),
     primaryColor: HEX.test(r.primaryColor) ? r.primaryColor : d.primaryColor,
     accentColor: HEX.test(r.accentColor) ? r.accentColor : d.accentColor,
-    showFrame: bool(r.showFrame, d.showFrame),
+    // layout antigo: showFrame=false equivale a "sem moldura"
+    frameStyle: FRAME_STYLES.some(f => f.id === r.frameStyle) ? r.frameStyle : r.showFrame === false ? 'nenhuma' : d.frameStyle,
+    frameLines: Number(r.frameLines) === 1 ? 1 : 2,
+    frameColor: HEX.test(r.frameColor) ? r.frameColor : HEX.test(r.primaryColor) ? r.primaryColor : d.frameColor,
+    frameWidth: Number.isFinite(Number(r.frameWidth)) && r.frameWidth !== null && r.frameWidth !== '' ? Math.min(6, Math.max(0.2, Number(r.frameWidth))) : d.frameWidth,
+    frameColor2: HEX.test(r.frameColor2) ? r.frameColor2 : HEX.test(r.accentColor) ? r.accentColor : d.frameColor2,
+    frameWidth2: Number.isFinite(Number(r.frameWidth2)) && r.frameWidth2 !== null && r.frameWidth2 !== '' ? Math.min(4, Math.max(0.2, Number(r.frameWidth2))) : d.frameWidth2,
     title: text(r.title, d.title, 40),
     subtitle: text(r.subtitle, d.subtitle, 80),
     intro: text(r.intro, d.intro, 120),

@@ -3,10 +3,10 @@
  * assinaturas, cores e verso, com pré-visualização do PDF.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Image as ImageIcon, Type, PenLine, Palette, FileText, RotateCcw, Save, Loader2, Eye, FileUp } from 'lucide-react';
+import { Image as ImageIcon, Type, PenLine, Palette, FileText, RotateCcw, Save, Loader2, Eye, FileUp, Frame } from 'lucide-react';
 import { DielectricStorageService } from '../../../services/syncEngine';
 import {
-  DEFAULT_LAYOUT, TEMPLATE_FIELDS, getTrainingLayout, normalizeLayout, saveTrainingLayout, type TrainingCertificateLayout
+  DEFAULT_LAYOUT, FRAME_STYLES, TEMPLATE_FIELDS, getTrainingLayout, normalizeLayout, saveTrainingLayout, type FrameStyle, type TrainingCertificateLayout
 } from '../layout';
 import { getCourses, getInstructors } from '../repository';
 import { canManageSigningCerts } from '../signingCerts';
@@ -76,6 +76,35 @@ const Toggle: React.FC<{ label: string; checked: boolean; onChange: (v: boolean)
     {label}
   </label>
 );
+
+/** Miniatura da moldura (A4 deitado) para a lista de modelos. */
+const FrameThumb: React.FC<{ style: FrameStyle; lines: number; c1: string; c2: string }> = ({ style, lines, c1, c2 }) => {
+  const two = lines === 2;
+  const W = 60, H = 42;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto bg-white rounded" aria-hidden="true">
+      {style === 'faixa' && <rect x="1.5" y="1.5" width={W - 3} height={H - 3} fill="none" stroke={c1} strokeWidth="3" />}
+      {style === 'geometrica' && (
+        <>
+          {[[0, 0, 9, 0, 0, 9], [W, 0, W - 9, 0, W, 9], [0, H, 9, H, 0, H - 9], [W, H, W - 9, H, W, H - 9]].map((t, i) => <polygon key={i} points={`${t[0]},${t[1]} ${t[2]},${t[3]} ${t[4]},${t[5]}`} fill={c1} />)}
+          {two && [[0, 0, 5, 0, 0, 5], [W, 0, W - 5, 0, W, 5], [0, H, 5, H, 0, H - 5], [W, H, W - 5, H, W, H - 5]].map((t, i) => <polygon key={i} points={`${t[0]},${t[1]} ${t[2]},${t[3]} ${t[4]},${t[5]}`} fill={c2} />)}
+        </>
+      )}
+      {style !== 'nenhuma' && style !== 'faixa' && (
+        <rect x="3" y="3" width={W - 6} height={H - 6} rx={style === 'arredondada' ? 4 : 0} fill="none" stroke={c1} strokeWidth="1.4" strokeDasharray={style === 'tracejada' ? '3 2' : undefined} />
+      )}
+      {two && style !== 'nenhuma' && (
+        <rect x={style === 'faixa' ? 5.5 : 5.5} y="5.5" width={W - 11} height={H - 11} rx={style === 'arredondada' ? 2.5 : 0} fill="none" stroke={c2} strokeWidth="0.6" />
+      )}
+      {style === 'cantos' && [[7, 7, 1, 1], [W - 7, 7, -1, 1], [7, H - 7, 1, -1], [W - 7, H - 7, -1, -1]].map(([x, y, sx, sy], i) => (
+        <path key={i} d={`M${x + sx * 7} ${y} L${x} ${y} L${x} ${y + sy * 7}`} fill="none" stroke={two ? c2 : c1} strokeWidth="1.6" />
+      ))}
+      <rect x="20" y="15" width="20" height="2.5" fill="#cbd5e1" />
+      <rect x="15" y="21" width="30" height="1.5" fill="#e2e8f0" />
+      <rect x="17" y="25" width="26" height="1.5" fill="#e2e8f0" />
+    </svg>
+  );
+};
 
 const Section: React.FC<{ icon: React.ElementType; title: string; children: React.ReactNode }> = ({ icon: Icon, title, children }) => (
   <div className={`${cardCls} p-4 space-y-3`}>
@@ -149,9 +178,9 @@ export const LayoutPanel: React.FC = () => {
           : target === 'verso' ? { backBackground: t.front }
             : { frontBackground: t.front, ...(t.back ? { backBackground: t.back } : {}) };
       // o modelo costuma ter moldura e logo próprios
-      if (!L.frontBackground && !L.backBackground && (L.showFrame || L.logoSource !== 'nenhum' || L.showCompanyData)
+      if (!L.frontBackground && !L.backBackground && (L.frameStyle !== 'nenhuma' || L.logoSource !== 'nenhum' || L.showCompanyData)
         && window.confirm('Desligar a moldura, o logo e os dados da empresa do sistema? (o modelo importado normalmente já tem)')) {
-        Object.assign(patch, { showFrame: false, logoSource: 'nenhum', showCompanyData: false });
+        Object.assign(patch, { frameStyle: 'nenhuma', logoSource: 'nenhum', showCompanyData: false });
       }
       set(patch);
       const notes = [
@@ -340,7 +369,58 @@ export const LayoutPanel: React.FC = () => {
             </p>
           </Section>
 
-          <Section icon={Palette} title="Cores e moldura">
+          <Section icon={Frame} title="Moldura">
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+              {FRAME_STYLES.map(f => (
+                <button key={f.id} type="button" title={f.hint} disabled={disabled} onClick={() => set({ frameStyle: f.id })}
+                  className={`rounded-xl border p-1.5 text-[10px] font-semibold flex flex-col items-center gap-1 ${L.frameStyle === f.id ? 'border-blue-600 ring-2 ring-blue-200 text-blue-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                  <FrameThumb style={f.id} lines={L.frameLines} c1={L.frameColor} c2={L.frameColor2} />
+                  {f.label}
+                </button>
+              ))}
+            </div>
+            {L.frameStyle !== 'nenhuma' && (
+              <>
+                <Field label="Linhas">
+                  <div className="flex gap-2">
+                    {[1, 2].map(n => (
+                      <button key={n} type="button" disabled={disabled} onClick={() => set({ frameLines: n })}
+                        className={`px-3 py-1.5 rounded-xl border text-xs font-semibold ${L.frameLines === n ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-300 text-slate-600'}`}>
+                        {n === 1 ? 'Uma linha' : 'Duas linhas'}
+                      </button>
+                    ))}
+                  </div>
+                </Field>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <div className="flex items-end gap-3">
+                    <Field label={L.frameLines === 2 ? 'Cor externa' : 'Cor'}>
+                      <input type="color" className="w-14 h-9 rounded-lg border border-slate-300" disabled={disabled} value={L.frameColor} onChange={e => set({ frameColor: e.target.value })} />
+                    </Field>
+                    <Field label={`${L.frameStyle === 'faixa' ? 'Largura da faixa' : 'Espessura'}: ${L.frameWidth.toFixed(1).replace('.', ',')} mm`} className="flex-1">
+                      <input type="range" min={0.2} max={6} step={0.1} disabled={disabled} value={L.frameWidth} onChange={e => set({ frameWidth: Number(e.target.value) })} className="w-full accent-blue-600" />
+                    </Field>
+                  </div>
+                  {L.frameLines === 2 && (
+                    <div className="flex items-end gap-3">
+                      <Field label="Cor interna">
+                        <input type="color" className="w-14 h-9 rounded-lg border border-slate-300" disabled={disabled} value={L.frameColor2} onChange={e => set({ frameColor2: e.target.value })} />
+                      </Field>
+                      <Field label={`Espessura: ${L.frameWidth2.toFixed(1).replace('.', ',')} mm`} className="flex-1">
+                        <input type="range" min={0.2} max={4} step={0.1} disabled={disabled} value={L.frameWidth2} onChange={e => set({ frameWidth2: Number(e.target.value) })} className="w-full accent-blue-600" />
+                      </Field>
+                    </div>
+                  )}
+                </div>
+                {canEdit && (
+                  <button type="button" className="text-[11px] text-slate-500 hover:underline" onClick={() => set({ frameColor: L.primaryColor, frameColor2: L.accentColor })}>
+                    Usar as cores do certificado (principal e destaque)
+                  </button>
+                )}
+              </>
+            )}
+          </Section>
+
+          <Section icon={Palette} title="Cores dos textos">
             <div className="flex flex-wrap gap-4">
               <Field label="Cor principal">
                 <input type="color" className="w-16 h-9 rounded-lg border border-slate-300" disabled={disabled} value={L.primaryColor} onChange={e => set({ primaryColor: e.target.value })} />
@@ -349,7 +429,6 @@ export const LayoutPanel: React.FC = () => {
                 <input type="color" className="w-16 h-9 rounded-lg border border-slate-300" disabled={disabled} value={L.accentColor} onChange={e => set({ accentColor: e.target.value })} />
               </Field>
             </div>
-            <Toggle label="Moldura dupla na borda da página" checked={L.showFrame} disabled={disabled} onChange={v => set({ showFrame: v })} />
           </Section>
 
           <Section icon={FileText} title="Verso">

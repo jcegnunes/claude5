@@ -30,7 +30,7 @@ describe('Treinamentos — layout do certificado', () => {
     expect(n.maxInstructors).toBe(2);
     expect(n.logoSource).toBe('empresa');
     expect(n.customLogo).toBe('');
-    expect(n.showFrame).toBe(false);
+    expect(n.frameStyle).toBe('nenhuma'); // showFrame=false de layouts antigos
     expect(n.bodyTemplate).toBe(DEFAULT_LAYOUT.bodyTemplate);
   });
 

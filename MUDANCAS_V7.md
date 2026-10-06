@@ -130,6 +130,10 @@ e mostra o aviso para executar o script.
   posição dos textos e das assinaturas para encaixar na arte. Ao importar, oferece desligar a
   moldura, o logo e os dados da empresa do sistema. Use A4 deitado (paisagem). A imagem é
   reduzida (~150 dpi, JPEG) e fica no layout da empresa. Nova dependência: `pdfjs-dist`.
+- **Molduras** (aba Modelo do certificado → Moldura): 6 modelos — Clássica, Arredondada,
+  Tracejada, Cantoneiras, Faixa larga e Geométrica — além de "Sem moldura"; uma ou duas
+  linhas, com cor e espessura de cada linha (na Faixa larga a espessura é a largura da faixa).
+  Layouts já salvos continuam com a moldura dupla de antes.
 - **Certificados**: emissão individual (sem turma), busca por nome/CPF/número, PDF,
   link de validação, cancelamento com motivo (o validador mostra CANCELADO).
 - **Painel**: emitidos no ano, turmas abertas, vencendo em 60 dias e vencidos sem

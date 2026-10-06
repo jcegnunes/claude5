@@ -61,14 +61,86 @@ function drawBackground(doc: jsPDF, w: number, h: number, image: string) {
   try { doc.addImage(image, imageFormat(image), 0, 0, w, h, undefined, 'MEDIUM'); } catch { /* imagem inválida */ }
 }
 
+/** Moldura da página conforme o modelo, número de linhas, cores e espessuras do layout. */
 function drawFrame(doc: jsPDF, w: number, h: number, a: Assets) {
-  if (!a.layout.showFrame) return;
-  doc.setDrawColor(...a.navy);
-  doc.setLineWidth(1.6);
-  doc.rect(7, 7, w - 14, h - 14);
-  doc.setDrawColor(...a.orange);
-  doc.setLineWidth(0.5);
-  doc.rect(10, 10, w - 20, h - 20);
+  const L = a.layout;
+  if (L.frameStyle === 'nenhuma') return;
+  const c1 = hexToRgb(L.frameColor);
+  const c2 = hexToRgb(L.frameColor2);
+  const two = L.frameLines === 2;
+  const outer = 7;
+  // linha interna fica 3 mm para dentro da externa (mais nas molduras largas)
+  const inner = outer + Math.max(3, L.frameWidth / 2 + L.frameWidth2 / 2 + 1.5);
+  const rect = (m: number, color: Rgb, lw: number, style: 'S' | 'F' = 'S', radius = 0) => {
+    doc.setDrawColor(...color);
+    doc.setLineWidth(lw);
+    if (radius > 0) doc.roundedRect(m, m, w - 2 * m, h - 2 * m, radius, radius, style);
+    else doc.rect(m, m, w - 2 * m, h - 2 * m, style);
+  };
+  const lines = (radius = 0) => {
+    rect(outer, c1, L.frameWidth, 'S', radius);
+    if (two) rect(inner, c2, L.frameWidth2, 'S', radius ? Math.max(1, radius - (inner - outer)) : 0);
+  };
+
+  switch (L.frameStyle) {
+    case 'arredondada':
+      lines(6);
+      break;
+    case 'tracejada': {
+      const dash = Math.max(1.5, L.frameWidth * 2.5);
+      doc.setLineDashPattern([dash, dash * 0.7], 0);
+      rect(outer, c1, L.frameWidth);
+      doc.setLineDashPattern([], 0);
+      if (two) rect(inner, c2, L.frameWidth2);
+      break;
+    }
+    case 'cantos': {
+      lines();
+      // cantoneiras em L sobre o canto da linha interna (ou única), com um quadrado no vértice
+      const len = 20;
+      const m = two ? inner : outer;
+      const color = two ? c2 : c1;
+      doc.setDrawColor(...color);
+      doc.setFillColor(...color);
+      doc.setLineWidth(Math.max(1.2, (two ? L.frameWidth2 : L.frameWidth) * 2));
+      const corners: Array<[number, number, number, number]> = [[m, m, 1, 1], [w - m, m, -1, 1], [m, h - m, 1, -1], [w - m, h - m, -1, -1]];
+      corners.forEach(([x, y, sx, sy]) => {
+        doc.line(x, y, x + sx * len, y);
+        doc.line(x, y, x, y + sy * len);
+        const q = 4;
+        doc.rect(x - q / 2, y - q / 2, q, q, 'F');
+      });
+      break;
+    }
+    case 'faixa': {
+      // faixa cheia a partir da borda da página (até ~13 mm, sem invadir os textos)
+      const band = 4 + L.frameWidth * 1.5;
+      doc.setFillColor(...c1);
+      doc.rect(0, 0, w, band, 'F');
+      doc.rect(0, h - band, w, band, 'F');
+      doc.rect(0, 0, band, h, 'F');
+      doc.rect(w - band, 0, band, h, 'F');
+      if (two) rect(band + 1.5, c2, L.frameWidth2);
+      break;
+    }
+    case 'geometrica': {
+      lines();
+      // triângulos cheios nos quatro cantos da página
+      const t = 26;
+      const tri = (color: Rgb, size: number) => {
+        doc.setFillColor(...color);
+        doc.triangle(0, 0, size, 0, 0, size, 'F');
+        doc.triangle(w, 0, w - size, 0, w, size, 'F');
+        doc.triangle(0, h, size, h, 0, h - size, 'F');
+        doc.triangle(w, h, w - size, h, w, h - size, 'F');
+      };
+      tri(c1, t);
+      if (two) tri(c2, t * 0.55);
+      break;
+    }
+    default:
+      lines();
+  }
 }
 
 /** Logo (proporção mantida) e dados da empresa, conforme a posição escolhida no layout. */
