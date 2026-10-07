@@ -12,11 +12,52 @@ import { generateGaugeCanvasDataUrl } from '../utils/gaugeUtils';
 import { saveDocLocally } from '../utils/nativeFileSaver';
 import { cleanSignatureImage } from '../utils/signatureCleaner';
 
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise(resolve => {
+    const r = new FileReader();
+    r.onload = () => resolve(typeof r.result === 'string' ? r.result : '');
+    r.onerror = () => resolve('');
+    r.readAsDataURL(blob);
+  });
+}
+
+/**
+ * Baixa a imagem com CORS para poder embuti-la no PDF. O app instalado guarda
+ * as fotos vistas na tela num cache "opaco" (sem CORS), que o PDF não consegue
+ * ler: se a 1ª tentativa falhar, busca de novo com um endereço que não está no cache.
+ */
+export async function fetchImageForPdf(url: string, fetcher: typeof fetch = fetch): Promise<Blob | null> {
+  const attempts = [url, `${url}${url.includes('?') ? '&' : '?'}pdf=${Date.now()}`];
+  for (const target of attempts) {
+    try {
+      const res = await fetcher(target, { mode: 'cors', credentials: 'omit' });
+      if (!res.ok) continue;
+      const blob = await res.blob();
+      if (!blob.size) continue;
+      if (blob.type.startsWith('image/')) return blob;
+      // enviada sem tipo (octet-stream): identifica PNG/JPEG pelos primeiros bytes
+      const head = new Uint8Array(await blob.slice(0, 4).arrayBuffer());
+      if (head[0] === 0x89 && head[1] === 0x50) return new Blob([blob], { type: 'image/png' });
+      if (head[0] === 0xff && head[1] === 0xd8) return new Blob([blob], { type: 'image/jpeg' });
+    } catch {
+      // resposta opaca do cache / rede: tenta o próximo endereço
+    }
+  }
+  return null;
+}
+
 export async function loadImageAsDataUrl(url: string): Promise<string> {
   if (!url) return '';
   if (url.startsWith('data:image/')) return url;
   // Foto guardada no aparelho (referência local): lida só agora
   if (isLocalPhotoRef(url)) return getPhotoDataUrl(url);
+  if (/^https?:\/\//i.test(url)) {
+    const blob = await fetchImageForPdf(url);
+    if (blob) {
+      const data = await blobToDataUrl(blob);
+      if (data.startsWith('data:image/')) return data;
+    }
+  }
   return new Promise((resolve) => {
     const img = new Image();
     img.crossOrigin = 'Anonymous';

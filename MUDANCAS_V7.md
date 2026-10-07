@@ -398,6 +398,12 @@ UPDATE public.users SET active = false WHERE email = 'maria@empresa.com.br';
 
 ## Fotos guardadas à parte no aparelho
 
+- **Correção (07/10/2026): fotos em branco no PDF/Word do laudo.** O app instalado guarda
+  as fotos da nuvem vistas na tela num cache "opaco", que o gerador de PDF não consegue
+  ler. Agora a foto é baixada com CORS e, se vier desse cache, buscada de novo direto da
+  nuvem. Vale para laudo, certificado, relatório consolidado, resumo em lote e Word.
+  Gerar o PDF de fotos que estão só na nuvem exige internet.
+
 - As fotos dos ensaios (evidências e inspeção visual) saem de dentro dos registros e ficam
   guardadas como **arquivos binários** num armazenamento próprio do aparelho (área privada
   do app no disco). O ensaio guarda só a referência `jvm-foto:<id>`.

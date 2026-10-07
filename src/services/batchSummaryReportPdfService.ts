@@ -1,45 +1,14 @@
 import { hardenPdfText } from '../utils/safePdf';
-import { getPhotoDataUrl, isLocalPhotoRef } from './photoStore';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { TestRecord, Client, CompanyLabInfo } from '../types';
 import { DielectricStorageService } from './syncEngine';
 import { formatDateBR, getTodayBR } from '../utils/dateUtils';
-import { sanitizeForFilename, getEffectiveCollaborator } from './pdfGenerator';
+import { sanitizeForFilename, getEffectiveCollaborator, loadImageAsDataUrl } from './pdfGenerator';
 import { getEquipmentTypeDescription, getApplicableNormsList } from './spreadsheetService';
 import { saveDocLocally } from '../utils/nativeFileSaver';
 import { cleanSignatureImage } from '../utils/signatureCleaner';
 
-async function loadImageAsDataUrl(url: string): Promise<string> {
-  if (!url) return '';
-  if (url.startsWith('data:image/')) return url;
-  // Foto guardada no aparelho (referência local): lida só agora
-  if (isLocalPhotoRef(url)) return getPhotoDataUrl(url);
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = 'Anonymous';
-    img.onload = () => {
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.naturalWidth || 600;
-        canvas.height = img.naturalHeight || 450;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(img, 0, 0);
-          resolve(canvas.toDataURL('image/jpeg', 0.9));
-        } else {
-          resolve(url);
-        }
-      } catch {
-        resolve(url);
-      }
-    };
-    img.onerror = () => {
-      resolve('');
-    };
-    img.src = url;
-  });
-}
 
 export function generateSummaryReportPdfFileName(tests: TestRecord[]): string {
   const primaryClientId = tests[0]?.clientId;
