@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   ShieldCheck,
   Wifi,
@@ -63,6 +63,8 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [companyDropdownOpen, setCompanyDropdownOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+  const companyMenuRef = useRef<HTMLDivElement>(null);
 
   const [companies, setCompanies] = useState<Company[]>(() => DielectricStorageService.getCompanies());
   const [activeCompany, setActiveCompany] = useState<Company>(() => DielectricStorageService.getActiveCompany());
@@ -81,6 +83,25 @@ export const Navbar: React.FC<NavbarProps> = ({
     window.addEventListener('jvm-data-changed', handleDataChanged);
     return () => window.removeEventListener('jvm-data-changed', handleDataChanged);
   }, []);
+
+  // Clique/toque fora do menu ou Esc: fecha os menus abertos
+  useEffect(() => {
+    if (!userDropdownOpen && !companyDropdownOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as Node;
+      if (userDropdownOpen && !userMenuRef.current?.contains(target)) setUserDropdownOpen(false);
+      if (companyDropdownOpen && !companyMenuRef.current?.contains(target)) setCompanyDropdownOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setUserDropdownOpen(false); setCompanyDropdownOpen(false); }
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [userDropdownOpen, companyDropdownOpen]);
 
   const handleSelectCompany = (comp: Company) => {
     DielectricStorageService.setActiveCompany(comp);
@@ -138,7 +159,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="hidden lg:flex items-center gap-2">
 
             {/* Multi-Company Dropdown Selector */}
-            <div className="relative">
+            <div className="relative" ref={companyMenuRef}>
               <button
                 onClick={() => {
                   setCompanyDropdownOpen(!companyDropdownOpen);
@@ -255,7 +276,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
 
           {/* Right: User Profile & Quick Multi-User / Logout Dropdown */}
-          <div className="relative shrink-0">
+          <div className="relative shrink-0" ref={userMenuRef}>
             <button
               onClick={() => {
                 setUserDropdownOpen(!userDropdownOpen);
